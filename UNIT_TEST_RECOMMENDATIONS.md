@@ -1,6 +1,8 @@
 # Unit test recommendations (from the code review)
 
-Source: an independent code review of branch `autonomy-sim` (2026-10-24). Each main finding was then checked against the code and the library source. **Nothing has been fixed yet.**
+Source: an independent code review of branch `autonomy-sim` (2026-10-24). Each main finding was then checked against the code and the library source.
+
+**Status:** #1 was fixed during phases 3–4 (read the drivetrain state before locking). All others are still open.
 
 Current coverage:
 - JUnit, 18 tests: `AimControllerTest` and `DriftModelTest`, all passing.
@@ -16,7 +18,7 @@ Current coverage:
 
 ## Findings → recommended tests
 
-### 1. HIGH (sim) — the sim can deadlock
+### 1. HIGH (sim) — the sim can deadlock — ✅ FIXED (phases 3–4; still worth the stress test below)
 - **Problem:** `WorldModel.setTruth` (synchronized) calls `drivetrain.getStateCopy()`, which takes CTRE's state lock. Meanwhile CTRE calls `WorldModel.onSample` while already holding that lock. The two threads can wait on each other forever. `SimManager` syncTruth has the same problem.
 - **Unit test:** read the state *before* taking the world lock (`setTruth(Pose2d, SwerveDriveState)`). Then a JUnit test hammers `setTruth` from one thread while another thread calls `onSample` with a fake state. Assert it finishes within a timeout (`assertTimeoutPreemptively`).
 - **Integration test:** a `sim-ui/scripts` stress script that sends `placeRobot` 200× while a path runs. Assert `/Sim/Heartbeat` keeps increasing.
@@ -84,6 +86,31 @@ Current coverage:
 ### 12. Behavior choice (real robot, needs decision)
 - **Behavior:** `shootFor()` feeds after 1.5 s even if the flywheel isn't at speed.
 - **Test:** whichever way you choose, add a test that pins it (`shootFor` with a never-at-speed shooter feeds, or doesn't, after 1.5 s).
+
+## Second review (phases 3–4, 2026-10-25) — all fixed
+
+No high-risk findings in the real-robot code. Each item was checked against the code before fixing.
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| R2-1 | Medium (sim) | The TOWER was modeled as a sightline-blocking block, and tags 15/16/31/32 sit inside it, so they were never seen. | The TOWER is still solid for Plan-tab collision warnings, but `blocksVision: false` (`gen-field.mjs` → `FieldModel`). | ✅ `CameraGeometryTest` (5 tests: tower tags visible, HUB blocks, face tags, behind camera, out of range) |
+| R2-2 | Medium (sim) | The PhotonVision mount error was applied in each camera's own frame (`Transform3d.plus`), unlike the UI and guide. | Applied in the robot frame (translation + yaw about the robot's vertical axis). | Live: mount error X moves every camera forward |
+| R2-3 | Med/low (**real robot**) | The minimum aim turn rate could sweep through the tolerance band, and "aimed" counted loops without checking the robot had slowed, so it could fire mid-overshoot. | "Aimed" now also needs tx to change ≤ 0.15° per loop (`MAX_SETTLED_TX_CHANGE_DEG`). **Still check overshoot on blocks.** | ✅ `AimControllerTest.sweepingThroughTheBandIsNotAimed` |
+| R2-4 | Low (**real robot**) | A pose reset makes the heading jump, which read as thousands of °/s and dropped one MegaTag2 frame. | A jump over 30° in one loop is treated as a reset (rate 0). | Suggested: a `VisionSubsystem` test with a fake heading supplier |
+| R2-6 | Low (sim) | With zero noise and a parked robot, identical LL3 values were dropped by NetworkTables, so there were no new frames. | Latency jitter of 0–0.5 ms makes every frame unique. | Live: kidnap at noise 0 gets corrected |
+| R2-7 | Low (sim) | The flywheel "fast enough" check compared wheel speed with the motor setpoint (only right at 1:1 gearing). | Compares motor (rotor) speed; the Mechanisms panel uses the same units. | Suggested: a `FuelSim` test with gearing ≠ 1 |
+| R2-8 | Low (UI) | The stale LL3 marker stayed after disabling it; saved camera settings were merged only at the top level. | `lastFrame` cleared when disabled; per-camera merge with defaults. | — |
+| R2-5 | Low (sim) | At most one odometry sample (~4 ms) can be counted twice right after a teleport. | Not fixed (negligible). | — |
+
+## New in phases 3–4 (no bug found, worth testing)
+- **`LimelightSim` MegaTag2 math (JUnit):**
+  - With zero noise, zero mount error and the true heading told, the solved pose equals the truth.
+  - A heading error δ at distance d gives about δ·d of position error.
+  - A mount error gives a constant bias.
+- **`CameraGeometry`:** ✅ done (`CameraGeometryTest`).
+- **`FuelSim` rules:** aim within/outside tolerance, too close / too far, slow flywheel → the expected result codes. Preload is consumed one ball per 0.25 s.
+- **`VisionSubsystem` MegaTag2 filter:** frames are ignored above 360°/s, and the θ std dev is effectively infinite.
+- **`AimController` minimum turn:** already covered (`justOutsideToleranceStillOvercomesFriction`, `insideToleranceUsesGentleProportionalTurn`).
 
 ## Coverage gaps worth filling (no bug found)
 - **`geometry.ts`:**

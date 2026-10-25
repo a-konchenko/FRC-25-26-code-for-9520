@@ -162,6 +162,7 @@
           "id": "blue-tower",
           "name": "TOWER",
           "type": "solid",
+          "blocksVision": false,
           "heightM": 1.98755,
           "poly": [
             [
@@ -369,6 +370,7 @@
           "id": "red-tower",
           "name": "TOWER",
           "type": "solid",
+          "blocksVision": false,
           "heightM": 1.98755,
           "poly": [
             [
@@ -592,6 +594,7 @@
           "id": "blue-tower",
           "name": "TOWER",
           "type": "solid",
+          "blocksVision": false,
           "heightM": 1.98755,
           "poly": [
             [
@@ -799,6 +802,7 @@
           "id": "red-tower",
           "name": "TOWER",
           "type": "solid",
+          "blocksVision": false,
           "heightM": 1.98755,
           "poly": [
             [

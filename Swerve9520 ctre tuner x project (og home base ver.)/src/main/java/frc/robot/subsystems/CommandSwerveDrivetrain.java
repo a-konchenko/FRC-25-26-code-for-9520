@@ -63,6 +63,12 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private final List<Consumer<SwerveDriveState>> m_telemetryListeners = new CopyOnWriteArrayList<>();
     private boolean m_telemetryHooked = false;
 
+    /** Listener told about every vision measurement fused into the pose estimate (the simulator uses it). */
+    public interface VisionMeasurementListener {
+        void accept(Pose2d pose, double timestampSeconds, Matrix<N3, N1> stdDevs);
+    }
+    private final List<VisionMeasurementListener> m_visionListeners = new CopyOnWriteArrayList<>();
+
     /* Swerve request to apply during PathPlanner path following */
     private final SwerveRequest.ApplyRobotSpeeds m_pathApplyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
 
@@ -375,6 +381,12 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     @Override
     public void addVisionMeasurement(Pose2d visionRobotPoseMeters, double timestampSeconds) {
         super.addVisionMeasurement(visionRobotPoseMeters, Utils.fpgaToCurrentTime(timestampSeconds));
+        for (var l : m_visionListeners) l.accept(visionRobotPoseMeters, timestampSeconds, null);
+    }
+
+    /** Extra listener for fused vision measurements (simulator). Nothing registers one on the robot. */
+    public void addVisionMeasurementListener(VisionMeasurementListener listener) {
+        m_visionListeners.add(listener);
     }
 
     /**
@@ -397,6 +409,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         Matrix<N3, N1> visionMeasurementStdDevs
     ) {
         super.addVisionMeasurement(visionRobotPoseMeters, Utils.fpgaToCurrentTime(timestampSeconds), visionMeasurementStdDevs);
+        for (var l : m_visionListeners) l.accept(visionRobotPoseMeters, timestampSeconds, visionMeasurementStdDevs);
     }
 
     /**

@@ -1,5 +1,6 @@
 package frc.robot.sim;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +31,7 @@ import frc.robot.subsystems.CommandSwerveDrivetrain;
  */
 public class SimManager {
     private final CommandSwerveDrivetrain drivetrain;
+    private final RobotContainer container;
     private final DriftModel  drift = new DriftModel();
     private final WorldModel  world;
     private final SimNT       nt = new SimNT();
@@ -37,6 +39,19 @@ public class SimManager {
     private final SimControl  control;
     private final PathLogging pathLogging = new PathLogging(nt);
     private final PlanPreview planPreview = new PlanPreview(nt);
+    private final FieldModel  field = new FieldModel();
+    private final LimelightSim ll3 = new LimelightSim("ll3", LimelightSim.Mode.MEGATAG2, "limelight-three",
+        SimRobotConstants.kLL3Mount, 62.5, 48.9, 6.0, 30.0);   // LL3: 62.5° × 48.9° FOV
+    private final LimelightSim ll4 = new LimelightSim("ll4", LimelightSim.Mode.TARGETING, "limelight-four",
+        SimRobotConstants.kLL4Mount, 82.0, 56.2, 7.0, 20.0);   // LL4: 82° × 56.2° FOV
+    private final PhotonSim   photon;
+    private final MechanismSims mech = new MechanismSims();
+    private final FuelSim     fuel;
+
+    /** Vision measurements the robot code actually fused: {seq, x, y, θ, timestamp}. */
+    private final ArrayDeque<double[]> fused = new ArrayDeque<>();
+    private int fusedSeq = 0;
+    private double lastUpdateTime = Timer.getFPGATimestamp();
 
     private boolean placed   = false;
     private int     heartbeat = 0;
@@ -45,9 +60,18 @@ public class SimManager {
     private Command pendingSchedule = null;
 
     public SimManager(RobotContainer container) {
+        this.container  = container;
         this.drivetrain = container.drivetrain;
         this.world      = new WorldModel(drivetrain, drift);
         this.control    = new SimControl(this, container, nt);
+        this.photon     = new PhotonSim(container.vision, field);
+        this.fuel       = new FuelSim(mech, container.shooter, field);
+
+        // Every vision measurement the pose estimator receives (main thread, from VisionSubsystem)
+        drivetrain.addVisionMeasurementListener((pose, ts, std) -> {
+            fused.addLast(new double[] { ++fusedSeq, pose.getX(), pose.getY(), pose.getRotation().getRadians(), ts });
+            while (fused.size() > 40) fused.removeFirst();
+        });
 
         publishStatic();
         System.out.println("[Sim] SimManager ready — open the web UI at http://localhost:5173");
@@ -105,10 +129,20 @@ public class SimManager {
     /** Estimate (what the code believes) and truth (where it really is) separately. */
     public void placeRobot(Pose2d estimate, Pose2d truth) {
         drivetrain.resetPose(estimate);
+        var state = drivetrain.getStateCopy(); // read BEFORE locking (see WorldModel)
         synchronized (world.lock()) {
-            world.setTruth(truth);
+            world.setTruth(truth, state);
             drift.reset();
         }
+        teleported(truth);
+    }
+
+    /** Cameras must not report frames that straddle a teleport (see LimelightSim.suppress). */
+    private void teleported(Pose2d truth) {
+        double s = 0.15;
+        ll3.suppress(s);
+        ll4.suppress(s);
+        photon.teleported(truth, s);
     }
 
     public void cancelTestDrive() {
@@ -136,11 +170,82 @@ public class SimManager {
         // Truth integrates on its own 250 Hz thread (see WorldModel)
         world.setDriftEnabled(DriverStation.isEnabled());
 
+        double now = Timer.getFPGATimestamp();
+        double dt = Math.min(now - lastUpdateTime, 0.05);
+        lastUpdateTime = now;
+        Pose2d[] te = world.getTruthAndEstimate();
+
+        // Mechanisms + fuel (phase 4)
+        mech.update(dt);
+        fuel.update(dt, te[0]);
+
+        // Cameras (phase 3). Frames are written at the END of this loop, so the
+        // robot code reads them next loop — like a real camera, never "instant".
+        ll3.update(world, field, te[1]);
+        ll4.update(world, field, te[1]);
+        photon.update(te[0]);
+
         publishState();
+        publishVision(te[0]);
+        publishMech();
+        fuel.publish(nt);
+    }
+
+    public void resetFuel() { fuel.reset(); }
+
+    private void publishVision(Pose2d truth) {
+        for (LimelightSim ll : new LimelightSim[] { ll3, ll4 }) {
+            double[] m = ll.getMount();
+            String p = "Vision/" + ll.key + "/";
+            nt.array(p + "config", new double[] { m[0], m[1], m[2], m[4], m[5], ll.hFovDeg, ll.vFovDeg, ll.maxRangeM,
+                ll.enabled ? 1 : 0, ll.mountErrX, ll.mountErrY, ll.mountErrYawDeg });
+            nt.array(p + "visible", ll.visibleIds.stream().mapToDouble(Integer::doubleValue).toArray());
+            double[] f = new double[ll.lastFrame.length + 1];
+            f[0] = ll.frameCount;
+            System.arraycopy(ll.lastFrame, 0, f, 1, ll.lastFrame.length);
+            nt.array(p + "frame", f);
+        }
+
+        // PhotonVision: configured mounts {x, y, z, roll, pitch, yaw} per camera, params, and
+        // which tags each could see (display only — PhotonLib does the real projection)
+        int n = photon.count();
+        double[] mounts = new double[n * 6];
+        List<Double> visible = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            double[] m = photon.mount(i);
+            System.arraycopy(m, 0, mounts, 6 * i, 6);
+            if (!photon.enabled) continue;
+            double[] cam = CameraGeometry.cameraOnField(truth, m[0] + photon.mountErrX, m[1] + photon.mountErrY, m[2],
+                m[5] + photon.mountErrYawDeg, m[4]);
+            List<Integer> ids = new ArrayList<>();
+            CameraGeometry.visibleTags(field, cam, PhotonSim.kHFovDeg, PhotonSim.kVFovDeg, PhotonSim.kMaxRangeM, ids, null);
+            for (int id : ids) { visible.add((double) i); visible.add((double) id); }
+        }
+        nt.array("Vision/pv/mounts", mounts);
+        nt.array("Vision/pv/params", new double[] { PhotonSim.kHFovDeg, PhotonSim.kVFovDeg, PhotonSim.kMaxRangeM,
+            photon.enabled ? 1 : 0, photon.mountErrX, photon.mountErrY, photon.mountErrYawDeg });
+        nt.array("Vision/pv/visible", visible.stream().mapToDouble(Double::doubleValue).toArray());
+
+        double[] flat = new double[fused.size() * 5];
+        int k = 0;
+        for (double[] f : fused) for (double v : f) flat[k++] = v;
+        nt.array("Vision/fused", flat);
+    }
+
+    private void publishMech() {
+        nt.array("Mech/state", new double[] {
+            mech.shooter.rotorRps(), container.shooter.getShooterSetpointRPS(), mech.feeder.rps(), mech.intake.rps(),
+            mech.arm.fraction(), mech.climbLeft.fraction(), mech.climbRight.fraction(),
+            container.shooter.isAtSpeed() ? 1 : 0 });
     }
 
     private void readControls() {
         synchronized (world.lock()) { readDriftSettings(); }
+        ll3.readSettings(nt);
+        ll4.readSettings(nt);
+        photon.readSettings(nt);
+        fuel.readSettings(nt);
+        if (nt.action("resetFuel") != null) fuel.reset();
         readActions();
     }
 
@@ -164,7 +269,9 @@ public class SimManager {
         // [x, y, thetaRad] — move ONLY the truth ("kidnap"): the robot code doesn't know
         double[] kidnap = nt.action("kidnap");
         if (kidnap != null && kidnap.length >= 3) {
-            world.setTruth(new Pose2d(kidnap[0], kidnap[1], Rotation2d.fromRadians(kidnap[2])));
+            Pose2d k = new Pose2d(kidnap[0], kidnap[1], Rotation2d.fromRadians(kidnap[2]));
+            world.setTruth(k);
+            teleported(k);
         }
 
         // [pattern] — 1 = 2 m square, 2 = spin in place 2 turns
@@ -180,10 +287,12 @@ public class SimManager {
 
         // [] — snap truth back onto the estimate (clears accumulated drift)
         if (nt.action("syncTruth") != null) {
+            var state = drivetrain.getStateCopy(); // read BEFORE locking (see WorldModel)
             synchronized (world.lock()) {
-                world.setTruth(drivetrain.getState().Pose);
+                world.setTruth(state.Pose, state);
                 drift.reset();
             }
+            teleported(state.Pose);
         }
     }
 

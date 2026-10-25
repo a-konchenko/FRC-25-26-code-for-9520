@@ -34,11 +34,25 @@ public class AimController {
     public static final double MAX_ROT_RAD_S     = RotationsPerSecond.of(0.5).in(RadiansPerSecond);
     public static final double AIM_TOLERANCE_DEG = 1.5;
     public static final double TX_DEADZONE_DEG   = 0.3;
+    /**
+     * Smallest turn rate used while OUTSIDE the aim tolerance. Near the target
+     * the P term alone asks for ~0.2 rad/s — less voltage than the drivetrain's
+     * static friction — so the robot stalls a few degrees off and never fires
+     * (found in the simulator, 2026-10). Tune on the robot.
+     */
+    public static final double MIN_ROT_RAD_S     = 0.4;
     public static final int    SETTLE_LOOPS      = 5;     // ~100 ms at 50 Hz
+    /**
+     * "Aimed" also requires tx to be nearly still (change per loop ≤ this), so a
+     * robot sweeping THROUGH the tolerance band while overshooting doesn't count
+     * as aimed and fire (code review, 2026-10).
+     */
+    public static final double MAX_SETTLED_TX_CHANGE_DEG = 0.15;
 
     private final PIDController pid = new PIDController(kP, kI, kD);
     private int     settleCount = 0;
     private boolean aimed       = false;
+    private double  lastTx      = Double.NaN;
 
     public AimController() {
         pid.setSetpoint(0.0); // tx = 0 means perfectly aimed
@@ -48,6 +62,7 @@ public class AimController {
         pid.reset();
         settleCount = 0;
         aimed       = false;
+        lastTx      = Double.NaN;
     }
 
     /** Call once per loop. Returns the rotational rate to command (rad/s). */
@@ -65,9 +80,14 @@ public class AimController {
         double rot = 0.0;
         if (Math.abs(tx) > TX_DEADZONE_DEG) {
             rot = MathUtil.clamp(pid.calculate(Math.toRadians(tx)), -MAX_ROT_RAD_S, MAX_ROT_RAD_S);
+            if (Math.abs(tx) > AIM_TOLERANCE_DEG && Math.abs(rot) < MIN_ROT_RAD_S) {
+                rot = Math.copySign(MIN_ROT_RAD_S, -tx); // target right (tx > 0) → clockwise
+            }
         }
 
-        settleCount = Math.abs(tx) <= AIM_TOLERANCE_DEG ? settleCount + 1 : 0;
+        boolean still = Double.isNaN(lastTx) || Math.abs(tx - lastTx) <= MAX_SETTLED_TX_CHANGE_DEG;
+        lastTx = tx;
+        settleCount = (Math.abs(tx) <= AIM_TOLERANCE_DEG && still) ? settleCount + 1 : 0;
         aimed = settleCount >= SETTLE_LOOPS;
         return rot;
     }

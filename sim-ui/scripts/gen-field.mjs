@@ -102,7 +102,10 @@ function blueElements(v) {
       cite: '[GM] 65.65x47.0in, guardrail→BUMP; tags 17/28',
     },
     {
-      id: 'tower', name: 'TOWER', type: 'solid', heightM: 78.25 * IN,
+      // Open uprights at the wall + a floor plate: robots can't drive through it
+      // (solid for collision warnings), but cameras see tags 31/32 (15/16) on
+      // its wall face — so it must not block sightlines.
+      id: 'tower', name: 'TOWER', type: 'solid', blocksVision: false, heightM: 78.25 * IN,
       poly: rect(0, towerY - (39.0 * IN) / 2, 45.18 * IN, towerY + (39.0 * IN) / 2),
       cite: '[GM] base 39.0x45.18in; center from tags 31/32',
     },

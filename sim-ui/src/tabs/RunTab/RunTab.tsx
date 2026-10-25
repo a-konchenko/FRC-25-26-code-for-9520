@@ -15,9 +15,13 @@ import { ErrorChart, type ErrorSample } from './ErrorChart';
 import { RunChart, locErr, trackingErr, type RunFrame } from './RunChart';
 import { load, save } from '../../util/storage';
 import type { RunRequest } from '../../App';
+import { CAM_DEFAULTS, FUEL_DEFAULTS, type CamKey, type CamSettings, type FuelSettings } from '../../sim/cameras';
+import { VisionLayer } from './VisionLayer';
+import { CameraPanel } from './CameraPanel';
+import { MechPanel } from './MechPanel';
 
 type Tool = 'none' | 'place' | 'kidnap';
-interface Layers { plan: boolean; setpoint: boolean; truth: boolean; estimate: boolean; traces: boolean; tags: boolean; }
+interface Layers { plan: boolean; setpoint: boolean; truth: boolean; estimate: boolean; traces: boolean; tags: boolean; cameras: boolean; vision: boolean; shots: boolean; }
 interface Placement { x: number; y: number; deg: number; } // placement error, cm / cm / degrees
 
 const KIND_LABEL: Record<RunKind, string> = { 0: 'Auto', 1: 'Path', 2: 'Hand-coded' };
@@ -56,7 +60,21 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
   // ── settings (persisted per browser) ──────────────────────────────────────
   const [drift, setDrift] = useState<DriftSettings>(() => load('drift', DRIFT_PRESETS.welltuned.s));
   const [seed, setSeed] = useState<number>(() => load('seed', 9520));
-  const [layers, setLayers] = useState<Layers>(() => load('runLayers2', { plan: true, setpoint: true, truth: true, estimate: true, traces: true, tags: true }));
+  const [layers, setLayers] = useState<Layers>(() => load('runLayers2', { plan: true, setpoint: true, truth: true, estimate: true, traces: true, tags: true, cameras: true, vision: true, shots: true }));
+  // Merge per camera, so a setting added later still gets its default
+  const [cams, setCams] = useState<Record<CamKey, CamSettings>>(() => {
+    const stored = load('cams', CAM_DEFAULTS);
+    return Object.fromEntries((Object.keys(CAM_DEFAULTS) as CamKey[]).map((k) => [k, { ...CAM_DEFAULTS[k], ...stored[k] }])) as Record<CamKey, CamSettings>;
+  });
+  const [fuel, setFuel] = useState<FuelSettings>(() => load('fuel', FUEL_DEFAULTS));
+  useEffect(() => {
+    save('cams', cams);
+    for (const [key, c] of Object.entries(cams)) {
+      for (const [k, v] of Object.entries(c)) setSetting(`cam/${key}/${k}`, typeof v === 'boolean' ? (v ? 1 : 0) : v);
+    }
+  }, [cams]);
+  useEffect(() => { save('fuel', fuel); for (const [k, v] of Object.entries(fuel)) setSetting(`fuel/${k}`, v); }, [fuel]);
+  const fuelState = useNT<number[]>('/Sim/Fuel/state', [0, 0, 0, 0]);
   const [kind, setKind] = useState<RunKind>(() => load('runKind', 1 as RunKind));
   const [names, setNames] = useState<Record<RunKind, string>>(() => load('runNames', { 0: '', 1: 'Test path', 2: 'Shoot All (Stationary)' }));
   const [red, setRed] = useState<boolean>(() => load('runRed', false));
@@ -275,6 +293,9 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
                 )}
               </>
             )}
+            {scrubT == null && (
+              <VisionLayer variant={variant} truth={truth} showCameras={layers.cameras} showVision={layers.vision} showShots={layers.shots} />
+            )}
             {drag && <RobotShape pose={[drag.x, drag.y, drag.free ? drag.th : snapAngle(drag.th)]} size={size} style="placing" />}
           </FieldView>
           {tool !== 'none' && (
@@ -294,6 +315,9 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
           <Toggle label={<><i className="swatch swatch-setpoint" />Setpoint — where it should be now</>} checked={layers.setpoint} onChange={(v) => setLayers({ ...layers, setpoint: v })} />
           <Toggle label={<><i className="swatch swatch-estimate" />Estimate — what the code believes</>} checked={layers.estimate} onChange={(v) => setLayers({ ...layers, estimate: v })} />
           <Toggle label={<><i className="swatch swatch-truth" />Truth — where it really is</>} checked={layers.truth} onChange={(v) => setLayers({ ...layers, truth: v })} />
+          <Toggle label={<><i className="swatch swatch-cam" />Camera views + sightlines</>} checked={layers.cameras} onChange={(v) => setLayers({ ...layers, cameras: v })} />
+          <Toggle label={<><i className="swatch swatch-fused" />Vision measurements used</>} checked={layers.vision} onChange={(v) => setLayers({ ...layers, vision: v })} />
+          <Toggle label={<><i className="swatch swatch-shot" />Fuel shots</>} checked={layers.shots} onChange={(v) => setLayers({ ...layers, shots: v })} />
           <Toggle label="Traces" checked={layers.traces} onChange={(v) => setLayers({ ...layers, traces: v })} />
           <Toggle label="AprilTag IDs" checked={layers.tags} onChange={(v) => setLayers({ ...layers, tags: v })} />
         </section>
@@ -310,7 +334,11 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
                 <Stat label="Final localization" value={`${(summary.finalLoc * 100).toFixed(1)} cm`} tone={tone(summary.finalLoc, 0.05, 0.15)} />
                 <Stat label="Auto finished" value={runCommandEnd >= 0 ? `${runCommandEnd.toFixed(1)} s` : running ? '…' : 'not in time'} tone={runCommandEnd >= 0 ? 'ok' : running ? undefined : 'bad'} />
               </div>
-              <p className="muted tiny"><b>Tracking</b> = setpoint vs estimate → the path follower (tuning, too-fast paths). <b>Localization</b> = estimate vs truth → drift and cameras (phase 3).</p>
+              <div className="stat-row">
+                <Stat label="Fuel scored" value={`${fuelState[1]} / ${fuelState[3]}`} tone={fuelState[1] > 0 ? 'ok' : undefined} />
+                <Stat label="Fuel missed" value={`${fuelState[2]}`} tone={fuelState[2] > 0 ? 'bad' : undefined} />
+              </div>
+              <p className="muted tiny"><b>Tracking</b> = setpoint vs estimate → the path follower (tuning, too-fast paths). <b>Localization</b> = estimate vs truth → drift, placement and cameras.</p>
             </>
           ) : (
             <p className="muted small">Pick an auto or path above and press <b>▶ Play</b>. The robot code builds it fresh from the files and runs the {runDuration.toFixed(0)} s autonomous period.</p>
@@ -318,6 +346,9 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
           {kind === 0 && plan.paths.length > 0 && <p className="muted tiny">Paths: {plan.paths.map((p) => p.name).join(' → ')}{plan.resetOdom ? '' : ' (no odometry reset)'}</p>}
           {kind === 2 && <p className="muted tiny">Hand-coded autos start wherever the robot is — use Place robot first.</p>}
         </section>
+
+        <CameraPanel cams={cams} setCam={(k, c) => setCams((all) => ({ ...all, [k]: c }))} />
+        <MechPanel fuel={fuel} setFuel={setFuel} />
 
         <section className="panel">
           <h3>Placement error</h3>

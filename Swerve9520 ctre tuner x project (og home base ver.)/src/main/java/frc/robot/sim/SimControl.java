@@ -126,6 +126,7 @@ public class SimControl {
         if (built == null) { state = State.IDLE; return; }
 
         placeAtStart(built.start, args);
+        sim.resetFuel();
         runCommand = built.command;
         runName = name;
         runKind = kind;
@@ -145,6 +146,7 @@ public class SimControl {
         setAlliance(red);
         Built built = build(kind, name, red);
         if (built != null) placeAtStart(built.start, args);
+        sim.resetFuel();
         state = State.IDLE;
         runId++;
     }

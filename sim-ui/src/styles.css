@@ -320,3 +320,43 @@ table.grid input.num { width: 100%; }
 .cmd-help { margin: 1px 0 2px 2px; }
 .cmd-children { margin-left: 6px; }
 .cmd-add { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0 2px; }
+
+/* ── Phases 3–4: cameras, vision, fuel, mechanisms ──────────────────────── */
+.swatch-cam { background: #a3e635; }
+.swatch-fused { background: #22c55e; height: 8px; width: 8px; border-radius: 50%; }
+.swatch-shot { background: #f59e0b; }
+.cam-cone { fill: #a3e635; fill-opacity: 0.08; stroke: #a3e635; stroke-opacity: 0.45; stroke-width: 0.012; }
+.cam-ll4 .cam-cone { fill: #f472b6; stroke: #f472b6; }
+.cam-pv .cam-cone { fill: #60a5fa; stroke: #60a5fa; fill-opacity: 0.05; }
+.cam-ray { stroke: #a3e635; stroke-width: 0.012; stroke-dasharray: 0.05 0.04; opacity: 0.8; }
+.cam-ll4 .cam-ray { stroke: #f472b6; }
+.cam-pv .cam-ray { stroke: #60a5fa; }
+.cam-dot { fill: #a3e635; }
+.cam-ll4 .cam-dot { fill: #f472b6; }
+.cam-pv .cam-dot { fill: #60a5fa; }
+.ll3-frame circle { fill: none; stroke: #a3e635; stroke-width: 0.025; }
+.ll3-frame line { stroke: #a3e635; stroke-width: 0.025; }
+.fused-dot { fill: #22c55e; stroke: white; stroke-width: 0.008; }
+.shot line { stroke-width: 0.025; }
+.shot-hit line { stroke: #22c55e; }
+.shot-miss line { stroke: var(--bad); stroke-dasharray: 0.06 0.04; }
+.shot-miss circle { fill: none; stroke: var(--bad); stroke-width: 0.02; }
+.ok { color: var(--ok); }
+
+.cam-card { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-bottom: 6px; }
+.cam-card summary { display: flex; flex-direction: column; cursor: pointer; list-style: none; }
+.cam-card summary::-webkit-details-marker { display: none; }
+.mount-err { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 4px; }
+.ll4-view svg { width: 100%; display: block; border-radius: 4px; }
+.ll4-bg { fill: #111; }
+.ll4-cross { stroke: #a3e635; stroke-width: 1; opacity: 0.6; }
+.ll4-target { fill: none; stroke: #f472b6; stroke-width: 2; }
+.ll4-offset { stroke: #f472b6; stroke-width: 1; stroke-dasharray: 3 2; }
+.ll4-text { fill: #ddd; font-size: 11px; font-family: ui-monospace, monospace; }
+
+.gauge { display: grid; grid-template-columns: 78px 1fr 92px; align-items: center; gap: 6px; margin: 3px 0; }
+.gauge-bar { position: relative; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.gauge-fill { height: 100%; background: var(--estimate); }
+.gauge-fill.ok { background: var(--ok); }
+.gauge-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
+.gauge-text { text-align: right; font-variant-numeric: tabular-nums; }

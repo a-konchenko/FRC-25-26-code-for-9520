@@ -43,7 +43,7 @@ npm run build         # typecheck + production build
 npm run gen-field     # regenerate field-2026.json (writes BOTH sim-ui/src/field/ and robot src/main/deploy/sim/)
 ```
 
-Developer scripts in `sim-ui/scripts/` run directly with `node` (TypeScript, so a Node version with type stripping) and require the robot sim to be running: `nt-smoke.ts` (dump all `/Sim` topics), `drift-test.ts [ideal|welltuned|worn] [1|2]`, `pause-test.ts`, `play-test.ts [kind] [name] [red] [preset]` (play an auto/path, report tracking/localization error), `preview-test.ts` (exact PathPlannerLib preview). These are the closest thing to integration tests.
+Developer scripts in `sim-ui/scripts/` run directly with `node` (TypeScript, so a Node version with type stripping) and require the robot sim to be running: `nt-smoke.ts` (dump all `/Sim` topics), `drift-test.ts [ideal|welltuned|worn] [1|2]`, `pause-test.ts`, `play-test.ts [kind] [name] [red] [preset]` (play an auto/path, report tracking/localization error), `preview-test.ts` (exact PathPlannerLib preview), `vision-test.ts` (kidnap correction, LL4 aim, ShootAllAuto scoring), `pv-test.ts` (PhotonVision sim). These are the closest thing to integration tests.
 
 ## Architecture
 
@@ -66,6 +66,9 @@ Standard command-based structure: `Robot` (TimedRobot) → `RobotContainer` (sub
 - `SimClock` implements pause/step. The one sim-only edit in shared code is `CommandSwerveDrivetrain.startSimThread()`, which uses `Timer.getFPGATimestamp()` (stops while paused) and clamps each step to 20 ms. Keep that, or the robot jumps after a pause.
 - `SimNT` publishes everything under `/Sim`; `SimControl` handles UI commands under `/Sim/Control/…`. One-shot actions are `double[]` with a leading sequence number: the robot acts once per change, and the UI never re-sends after reconnect. Follow this pattern for new actions.
 - `SimRobotConstants` holds physical placeholders (frame size, mass, MOI, camera mounts) still marked TO MEASURE.
+- **Locking:** CTRE calls `WorldModel.onSample` while holding its own state lock. Never call `drivetrain.getState()` / `getStateCopy()` while holding `world.lock()`. Read the state first, then lock.
+- Cameras: `LimelightSim` writes the real Limelight NT entries (LL3 MegaTag2 uses the heading the robot code sends). `PhotonSim` wraps PhotonLib's simulator. Both observe `WorldModel.truthAt(now − latency)`, and both must skip frames briefly after a teleport (`SimManager.teleported`).
+- `MechanismSims` drives the non-drive TalonFX sim states (it creates extra `TalonFX` objects for the same CAN IDs). `FuelSim` implements the "scored if aimed" rule.
 
 ### Web UI (`sim-ui/src`)
 

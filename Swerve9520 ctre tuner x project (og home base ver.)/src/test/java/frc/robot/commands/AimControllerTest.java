@@ -43,6 +43,30 @@ class AimControllerTest {
     }
 
     @Test
+    void justOutsideToleranceStillOvercomesFriction() {
+        // P alone gives ~0.17 rad/s at 2.5° — too little to beat static friction (sim finding)
+        double rate = aim.calculate(true, AimController.AIM_TOLERANCE_DEG + 1.0);
+        assertEquals(-AimController.MIN_ROT_RAD_S, rate, 1e-9);
+        aim.reset();
+        assertEquals(AimController.MIN_ROT_RAD_S, aim.calculate(true, -(AimController.AIM_TOLERANCE_DEG + 1.0)), 1e-9);
+    }
+
+    @Test
+    void insideToleranceUsesGentleProportionalTurn() {
+        double rate = aim.calculate(true, 1.0); // inside tolerance, outside deadzone
+        assertTrue(rate < 0 && Math.abs(rate) < AimController.MIN_ROT_RAD_S);
+    }
+
+    @Test
+    void sweepingThroughTheBandIsNotAimed() {
+        // Overshooting: tx moves 0.4° per loop across the ±1.5° band — never "aimed"
+        for (double tx = 1.4; tx >= -1.4; tx -= 0.4) {
+            aim.calculate(true, tx);
+            assertFalse(aim.isAimed(), "moving fast through the band at tx=" + tx);
+        }
+    }
+
+    @Test
     void insideDeadzoneDoesNotTurn() {
         assertEquals(0.0, aim.calculate(true, AimController.TX_DEADZONE_DEG / 2));
     }

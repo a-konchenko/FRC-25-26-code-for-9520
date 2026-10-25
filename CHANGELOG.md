@@ -1,6 +1,67 @@
 # Changelog
 
-Short reference. Full details: [docs/simulator.md](docs/simulator.md).
+Short reference. Full details: [docs/simulator.md](docs/simulator.md). Student guide: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
+
+## 2026-10-25 — branch `coach` (uncommitted): second code review fixes
+
+- **Real robot (check on blocks):**
+  - `AimController`: "aimed" also requires tx to be nearly still (≤ 0.15° change per loop), so an overshoot through the tolerance band doesn't fire.
+  - `VisionSubsystem`: a heading jump over 30° in one loop (pose reset) is no longer read as spinning.
+- **Simulator:**
+  - TOWER tags (15/16/31/32) are visible to cameras. The TOWER is still a collision obstacle in the Plan tab.
+  - PhotonVision mount error is applied in the robot frame.
+  - Limelight 3 frames stay unique (latency jitter), so zero-noise frames aren't dropped.
+  - The fuel flywheel check uses motor units.
+  - The stale LL3 marker is cleared when disabled; camera settings merge per camera.
+- **Tests:** 26 JUnit tests: new `CameraGeometryTest` (5) and `AimControllerTest.sweepingThroughTheBandIsNotAimed`.
+- Review details: `UNIT_TEST_RECOMMENDATIONS.md` → "Second review".
+- Student guide added: `docs/USER_GUIDE.md`.
+
+## 2026-10-24 (later) — branch `coach` (uncommitted): simulator phases 3–4
+
+### Robot code (affects the real robot — found by the simulator, check on the robot)
+- **Aim stall fixed:** `AimController` uses a minimum turn rate of 0.4 rad/s while outside the 1.5° tolerance.
+  - Before: near the target P asked for ~0.2 rad/s, below drivetrain friction, so the robot stopped 2–3° off and `ShootAllAuto` never fired.
+- **MegaTag2 heading corruption fixed** (`VisionSubsystem`):
+  - The LL3 yaw is no longer trusted (θ std dev 9999999); it was 0.8 rad and pulled the heading ~14° off while turning.
+  - MegaTag2 frames are ignored while spinning > 360°/s.
+  - `robot_orientation_set` now also sends the yaw rate.
+- Read-only access for the sim: `VisionSubsystem` camera list, LL4 constants, `getPhotonCameras()`; drivetrain `addVisionMeasurementListener` (unused on the robot).
+
+### Simulator
+- Cameras:
+  - `LimelightSim`: LL3 MegaTag2 and LL4 tx/ty, writing the real NT entries.
+  - `PhotonSim`: 4 PhotonVision cameras via PhotonLib.
+  - `CameraGeometry` + `FieldModel`: field of view, range, tag facing, Hub/Tower blocking.
+  - Frames use the true pose at capture time (`WorldModel.truthAt`).
+- Mechanisms:
+  - `MechanismSims`: flywheel, feeder, intake, arm, climbers on the simulated TalonFX controllers.
+  - `FuelSim`: preload, scored if aimed and in range, miss reasons.
+- UI:
+  - camera cones, sightlines, fused-measurement dots, LL4 view, per-camera controls (noise, latency, drops, mount error)
+  - fuel and mechanism panels, shot lines, fuel in the run summary
+- Fixes:
+  - Review finding #1: deadlock between the odometry thread and Place/Kidnap/Play.
+  - Camera frames are skipped for 0.15 s after a teleport, so frames never straddle the move.
+
+### Assumptions (new)
+- Camera specs:
+  - LL3: 62.5×48.9°, 6 m, 30 ms
+  - LL4: 82×56.2°, 7 m, 20 ms
+  - PhotonVision: 1280×800, 100° diag, 30 fps
+- Camera noise grows with distance² (LL3 ≈ 13 cm σ at 4 m, one tag).
+- The shooter fires out of the robot's front. Each ball costs ~8% of flywheel speed. One ball per 0.25 s while feeding.
+- Fuel scores at ±3°, 1.5–5.5 m, flywheel ≥ 90%. No ball flight and no pickup.
+- Arm, climber and intake gearing and travel are placeholders.
+
+### Things to know
+- With Ideal drift and cameras on, the estimate wanders ~1–3 cm (camera noise). That's expected.
+- MegaTag2 can't fix a heading error. A 2° heading placement error leaves ~9–13 cm of position error near the tags.
+- **With Well-tuned drift, localization peaks are higher with cameras than without** (~30 cm vs ~14 cm), from MegaTag2 while turning.
+  - `VisionSubsystem` trusts every LL3 frame equally (0.5 m).
+  - Scaling trust with distance and speed is a good student tuning task.
+- Review finding #2 is still open: Play while an auto is running doesn't restart it. Press Stop first.
+- Tests: `./gradlew build` runs 20 JUnit tests. New live checks: `sim-ui/scripts/vision-test.ts`, `pv-test.ts`.
 
 ## 2026-10-24 — branch `autonomy-sim` (uncommitted): simulator phases 1–2 + bug fixes
 
@@ -59,4 +120,4 @@ Short reference. Full details: [docs/simulator.md](docs/simulator.md).
   - Saving only changes formatting (`180.0` → `180`).
 - **Event markers must not use the drivetrain.** `AutoAim` / `AimAndShoot` are auto steps only.
 - **Tests:** `./gradlew build` runs 18 JUnit tests. Live checks are in `sim-ui/scripts/`.
-- **Not yet independently code-reviewed.**
+- **Code review done for phases 1–2.** Results and recommended tests are in `UNIT_TEST_RECOMMENDATIONS.md`.

@@ -48,6 +48,8 @@ public final class SimRobotConstants {
     public static final double kShooterGearing = 1.0;
     /** Flywheel moment of inertia. TO MEASURE */
     public static final double kShooterMoiKgM2 = 0.004;
+    /** Direction the shooter fires, relative to the robot's front (0 = forward). TO MEASURE */
+    public static final double kShooterYawDeg = 0.0;
     /** Preloaded FUEL (game manual allows up to 8). */
     public static final int    kFuelPreload = 8;
 

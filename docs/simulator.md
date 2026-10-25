@@ -3,8 +3,10 @@
 Run the **real robot code** on a laptop, on a to-scale 2026 REBUILT field, and see
 where the robot *thinks* it is versus where it *really* is.
 
-> Status: **Phases 1–2 complete**: backbone, Plan tab (PathPlanner-style editor)
-> and Play for autos. Cameras, shooter and collisions arrive in phases 3–5
+> **Students:** start with the plain-language [User Guide](USER_GUIDE.md). This page is the technical reference.
+
+> Status: **Phases 1–4 complete**: backbone, Plan tab, Play, cameras (Limelight 3/4,
+> PhotonVision), shooter, mechanisms and fuel. Collisions and polish are phase 5
 > (see [Roadmap](#roadmap)).
 
 ---
@@ -144,6 +146,57 @@ Click or drag the chart to **scrub** the recorded run (REPLAY); **● Live** ret
 To drive with the keyboard, run `./sim.sh` (with the GUI) and, in the WPILib sim
 GUI, drag "Keyboard 0" onto Joystick 0. The controls are the same as on the real robot.
 
+## Cameras (phase 3)
+
+Simulated cameras write the **same NetworkTables entries the real ones do**, so
+`VisionSubsystem` runs unchanged. They look at the field from the **true** robot pose
+at the moment the frame was taken (now − latency), so their measurements pull the
+estimate back toward the truth.
+
+| Camera | What the robot code gets | Notes |
+|---|---|---|
+| **Limelight 3** (MegaTag2) | `botpose_orb_wpiblue`, `tl`, `cl`, `hb` | Solves position using the heading **your code sends** (`robot_orientation_set`), like the real MegaTag2. So it **cannot fix a heading error**: a heading error becomes a position error (2° ≈ 9 cm at 2.5 m). 62.5° × 48.9° FOV, 6 m range. |
+| **Limelight 4** (shooter) | `tv`, `tx`, `ty`, `ta`, `hb` for the pipeline the code selects (0/1 hub blue/red, 2/3 trench) | Aims at the hub opening (`VisionSubsystem.HUB_HEIGHT_M`), using the code's own LL4 height and pitch. 82° × 56.2° FOV. |
+| **PhotonVision ×4** (Jetson) | Results for "Front/Back/Left/Right Camera" | PhotonLib's own simulator, with the transforms from `VisionSubsystem.PHOTON_CAMERAS`. Off by default. Properties (1280×800, 100° diagonal, 30 fps) are estimates. |
+
+A tag counts as seen when it is in the field of view, within range, facing the camera
+(< 75° off its normal), and the sightline doesn't pass through a Hub. The Tower is open
+uprights, so it doesn't block sightlines (`blocksVision: false`), but it still counts
+for Plan-tab collision warnings. Tested in `CameraGeometryTest`.
+
+**On the field:**
+- Camera view cones (LL3 green, LL4 pink, PV blue), with dashed sightlines to each tag it sees.
+- A hollow green circle: the latest Limelight 3 pose.
+- **Green dots**: the vision measurements the robot code actually **fused** into its pose estimate.
+
+**Per-camera controls (Cameras panel):**
+- On/off, noise ×, latency, dropped frames.
+- **Mount error**: the camera is physically somewhere other than the code/Limelight config says, which shows up as a constant bias.
+- The LL4 panel shows the image as the code sees it: crosshair plus target at (tx, ty).
+
+**Demos:**
+- **Kidnap** with Limelight 3 on: a 72 cm teleport is corrected to under 2 cm within 0.5 s. With it off, the error stays.
+- **Placement error with a heading offset**: the cameras fix X/Y but not the heading. That's the MegaTag2 lesson above.
+- **Spin fast**: MegaTag2 frames are ignored above 360°/s (robot code). Below that, notice the estimate wobble near the tags while turning.
+
+## Mechanisms and fuel (phase 4)
+
+- The **shooter flywheel and feeder** (CAN 13/14), **intake** (15), **intake arm** (19) and
+  **climbers** (16/17) have motor physics on the simulated TalonFX controllers.
+  The robot code's own commands drive them (VelocityVoltage, DutyCycleOut).
+  - Each ball takes about 8% out of the flywheel speed.
+  - The arm and climbers stop at simulated end-of-travel limits.
+  - Gearing, inertia and travel are placeholders.
+- **Fuel** follows the agreed simple model, scored if aimed:
+  - The robot starts with `preload` (≤ 8). While the feeder spins, one ball leaves every 0.25 s.
+  - A ball **scores** if the true robot points within ±3° of its alliance hub, is 1.5–5.5 m away, and the flywheel is at ≥ 90% of its setpoint.
+  - Otherwise it misses, with a reason: aim, too close, too far, or flywheel slow.
+  - The shooter is assumed to face the robot's front (`SimRobotConstants.kShooterYawDeg`).
+  - There's no ball flight and no floor pickup.
+- On the field, shots are drawn as **green** lines into the hub (scored) or **red** dashed (missed).
+  The Fuel panel shows in robot / scored / missed and the last shot's reason. Fuel reloads on every Play and Reset.
+- `Shoot All (Stationary)` now runs end to end: from 25° off, it aims to within 1°, spins up, and scores 8/8 in about 5 s.
+
 ---
 
 ## How it works
@@ -167,8 +220,9 @@ GUI, drag "Keyboard 0" onto Joystick 0. The controls are the same as on the real
 2. **WorldModel** reads the same encoder and gyro samples (250 Hz, like the real
    odometry) but passes them through the **DriftModel** first. That gives the **Truth**.
    With drift at zero, Truth equals Estimate exactly.
-3. Cameras (phase 3) will look at the field from the Truth, so vision measurements
-   tell the robot code where it really is.
+3. The camera sims look at the field from the Truth (at frame capture time), so vision
+   measurements tell the robot code where it really is.
+   With Ideal drift and cameras on, the estimate wanders by a centimeter or two because of camera noise.
 
 ### Drift model
 
@@ -217,12 +271,16 @@ run on the real robot.
 | ★ Path logging (plan + setpoint) | ❌ | `sim/PathLogging.java` | 2 | ✅ done |
 | ★ Exact preview (PathPlannerLib timing) | ❌ | `sim/PlanPreview.java` | 2 | ✅ done |
 | ★ Run recording, timeline, plan-vs-fact charts | ❌ | `sim-ui/src/tabs/RunTab` | 2 | ✅ done |
-| ★ Limelight 3 sim (MegaTag2) | ❌ (code reads it) | `sim/LimelightSim.java` | 3 | planned |
-| ★ Limelight 4 sim (shooter tx/ty) | ❌ (code reads it) | `sim/LimelightSim.java` | 3 | planned |
-| ★ PhotonVision sim (4 cameras) | partial (camera objects only) | `sim/PhotonSim.java` | 3 | planned |
-| ★ Shooter flywheel + feeder sim | ❌ | `sim/ShooterSim.java` | 4 | planned |
-| ★ Fuel (game piece) sim | ❌ | `sim/FuelSim.java` | 4 | planned |
-| ★ Intake / arm / climber sims | ❌ | `sim/MechanismSims.java` | 4 | planned |
+| ★ Limelight 3 sim (MegaTag2) | ❌ (code reads it) | `sim/LimelightSim.java` | 3 | ✅ done |
+| ★ Limelight 4 sim (shooter tx/ty) | ❌ (code reads it) | `sim/LimelightSim.java` | 3 | ✅ done |
+| ★ PhotonVision sim (4 cameras) | partial (camera objects only) | `sim/PhotonSim.java` | 3 | ✅ done |
+| ★ Camera visibility (FOV, range, facing, occlusion) | ❌ | `sim/CameraGeometry.java`, `sim/FieldModel.java` | 3 | ✅ done |
+| ★ Truth history (camera latency) | ❌ | `WorldModel.truthAt` | 3 | ✅ done |
+| ★ Camera UI (cones, sightlines, fused dots, LL4 view, controls) | ❌ | `sim-ui/src/tabs/RunTab/VisionLayer.tsx`, `CameraPanel.tsx` | 3 | ✅ done |
+| ★ Shooter flywheel + feeder sim | ❌ | `sim/MechanismSims.java` | 4 | ✅ done |
+| ★ Fuel (game piece) sim | ❌ | `sim/FuelSim.java` | 4 | ✅ done |
+| ★ Intake / arm / climber sims | ❌ | `sim/MechanismSims.java` | 4 | ✅ done |
+| ★ Mechanism + fuel UI | ❌ | `sim-ui/src/tabs/RunTab/MechPanel.tsx` | 4 | ✅ done |
 | ★ Field collisions + bump impulses | ❌ | `sim/Collisions.java` | 5 | planned |
 | ★ Recorder, replay, run compare, export | ❌ | `sim/Recorder.java`, UI | 5 | planned |
 
@@ -259,6 +317,18 @@ robot jumped forward after every pause. This method only runs in simulation.
 | `setIntake(boolean)` | `RobotContainer.java` | Explicit on/off (the X toggle uses it). |
 | Telemetry listeners | `CommandSwerveDrivetrain.java` | `registerTelemetry` is overridden so the robot code's telemetry still works and extra listeners can be added (`addTelemetryListener`). Nothing registers one on the robot; the sim's world model does. |
 | `setAutonomousOverride` / `getHandCodedAutos` / `getNamedCommandNames` | `RobotContainer.java` | Used only by the simulator; `getAutonomousCommand()` returns the chooser selection unless the sim set an override. |
+
+### Phases 3–4 (affect the real robot)
+
+These two fixes come from problems the simulator exposed. ⚠ Both need checking on the robot.
+
+| Change | File | What it does on the robot |
+|---|---|---|
+| **Aim never quite finished** | `commands/AimController.java` | Near the target, P alone asked for ~0.2 rad/s, below the drivetrain's static friction, so the robot stalled 2–3° off and `ShootAllAuto` never fired. Now there's a **minimum turn rate of 0.4 rad/s while outside the 1.5° tolerance** (`MIN_ROT_RAD_S`). Tested in `AimControllerTest`. **Tune on the robot.** |
+| **Aimed while still sweeping** (review) | `commands/AimController.java` | "Aimed" also requires tx to change ≤ 0.15° per loop (`MAX_SETTLED_TX_CHANGE_DEG`), so a robot overshooting through the band doesn't fire. Tested. |
+| **MegaTag2 yaw corrupted the heading** | `subsystems/VisionSubsystem.java` | MegaTag2's yaw is just the heading the code sent it, but it was fused with θ std dev 0.8 rad. While turning, that delayed heading pulled the estimate's heading off by ~14° and positions by up to ~1 m. Now: θ std dev = 9999999 (never trust MT2 yaw), MT2 frames are **ignored while spinning > 360°/s**, and `robot_orientation_set` also sends the yaw rate. A heading jump over 30° in one loop (a pose reset) is not counted as spinning. |
+| Camera configs public | `VisionSubsystem.java` | `PHOTON_CAMERAS` / `CamConfig`, `getPhotonCameras()` and the LL4 constants (`LL4_HEIGHT_M`, `LL4_PITCH_DEG`, `HUB_HEIGHT_M`) are public, so the sim uses the code's own values. Read-only, no behavior change. |
+| Vision measurement listeners | `CommandSwerveDrivetrain.java` | `addVisionMeasurementListener`: told about each fused measurement (the sim draws them). Nothing registers one on the robot. |
 
 ### Simulator hooks (sim only)
 
@@ -309,6 +379,9 @@ All in [`SimRobotConstants.java`](../Swerve9520%20ctre%20tuner%20x%20project%20(
 | LL3 mount | x 0.30, z 0.25 m, 20° up | Set in the Limelight web UI, not in code |
 | LL4 mount | x 0.20 m (height 0.55 m and pitch 25° are from code) | |
 | Shooter gearing / MOI | 1:1, 0.004 kg·m² | |
+| Shooter direction | robot front (`kShooterYawDeg` = 0) | |
+| Arm / climber gearing and travel | 60:1, 0.3 rot; 25:1, 8 rot | `MechanismSims.java` |
+| PhotonVision camera properties | 1280×800, 100° diag, 30 fps, 30 ms | `PhotonSim.java` |
 
 ---
 
@@ -331,6 +404,14 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `/Sim/NamedCommands` | string[] | Registered named commands |
 | `/Sim/Plan/previewResult` | double[] | {id, totalTime, then t, x, y, θ, v per state} |
 | `/Sim/Plan/previewError` | string | "id: message" |
+| `/Sim/Vision/<ll3\|ll4>/config` | double[12] | {mount x, y, z, pitch, yaw, hFOV, vFOV, range, enabled, mountErrX, mountErrY, mountErrYaw} |
+| `/Sim/Vision/<ll3\|ll4>/visible` | double[] | Tag IDs seen this frame |
+| `/Sim/Vision/ll3/frame`, `/Sim/Vision/ll4/frame` | double[] | {frame count, x, y, θ, tags} / {frame count, tv, tx, ty, ta} |
+| `/Sim/Vision/pv/mounts`, `params`, `visible` | double[] | Mounts {x, y, z, roll, pitch, yaw} × 4; {hFOV, vFOV, range, enabled, errX, errY, errYaw}; {camera, tag} pairs |
+| `/Sim/Vision/fused` | double[] | {seq, x, y, θ, timestamp} × last 40: measurements the pose estimator fused |
+| `/Sim/Mech/state` | double[8] | {flywheel rps, setpoint, feeder rps, intake rps, arm 0–1, climber L 0–1, climber R 0–1, atSpeed} |
+| `/Sim/Fuel/state` | double[4] | {in robot, scored, missed, preload} |
+| `/Sim/Fuel/shots` | double[] | {seq, fromX, fromY, toX, toY, result} × last 24; result 0 = scored, 1 aim, 2 close, 3 far, 4 slow |
 | `/Sim/Modules` | double[8] | {steer rad, speed m/s} × 4 |
 | `/Sim/Speeds` | double[3] | Chassis vx, vy, ω (robot frame) |
 | `/Sim/Drift/state` | double[4] | {distance m, gyro error °, localization error m, heading error °} |
@@ -359,6 +440,9 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `play` | double[] `[seq, kind, red, errX, errY, errθ]` | kind 0 = auto, 1 = path, 2 = hand-coded; placement error in m / rad (field frame) |
 | `reset` | double[] `[seq, kind, red, errX, errY, errθ]` | Stop and place on the start pose |
 | `/Sim/Plan/previewRequest` | string | `{"id": n, "path": {….path JSON…}}` |
+| `cam/<ll3\|ll4\|pv>/<setting>` | double | enabled (0/1), noise, latencyMs, dropPct, hFovDeg, maxRangeM, mountErrX, mountErrY, mountErrYawDeg |
+| `fuel/<setting>` | double | preload, aimTolDeg, minDistM, maxDistM |
+| `resetFuel` | double[] `[seq]` | Reload fuel |
 
 One-shot actions carry a sequence number. The robot acts once each time it changes,
 and the UI never re-sends an action after a reconnect.
@@ -372,6 +456,8 @@ Run each with the robot sim running:
 - `node scripts/pause-test.ts`: checks that pause freezes, step advances exactly, and resume doesn't jump.
 - `node scripts/play-test.ts [kind] [name] [red] [preset]`: plays an auto/path and prints tracking and localization error (e.g. `1 "Test path" 0 ideal` → localization 0.0 cm).
 - `node scripts/preview-test.ts`: requests the exact preview of `Test path`.
+- `node scripts/vision-test.ts`: kidnap with cameras on/off, LL4 aim, `Shoot All (Stationary)` scoring.
+- `node scripts/pv-test.ts`: enables the PhotonVision cameras and checks that they correct a kidnap.
 - `npm run gen-field`: regenerates `field-2026.json` (UI and Java copies).
 
 ---
@@ -382,6 +468,6 @@ Run each with the robot sim running:
 |---|---|---|
 | 1 Backbone | World model, drift, NT bridge, field, truth vs estimate, pause/step, bug fixes | ✅ |
 | 2 Autonomy + Plan tab | AutoBuilder + named commands, PathPlanner-style editor, Play (20 s auto), plan/setpoint layers, error charts, timeline | ✅ |
-| 3 Cameras | LL3 MegaTag2, LL4, PhotonVision sims, camera cones, correction dots, kidnap demo | next |
-| 4 Mechanisms | Shooter, feeder, fuel scoring, intake, climber; ShootAllAuto playable | |
-| 5 Polish | Collisions, bump impulses, run compare, narration, reports, exports, student exercises | |
+| 3 Cameras | LL3 MegaTag2, LL4, PhotonVision sims, camera cones, correction dots, kidnap demo | ✅ |
+| 4 Mechanisms | Shooter, feeder, fuel scoring, intake, climber; ShootAllAuto playable | ✅ |
+| 5 Polish | Collisions, bump impulses, run compare, narration, reports, exports, student exercises | next |

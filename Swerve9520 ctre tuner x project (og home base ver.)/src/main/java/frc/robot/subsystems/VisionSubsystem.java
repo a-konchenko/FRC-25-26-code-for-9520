@@ -60,10 +60,11 @@ public class VisionSubsystem extends SubsystemBase {
         TargetMode(int i) { this.pipelineIndex = i; }
     }
 
-    private record CamConfig(String name, Transform3d robotToCamera) {}
+    /** A PhotonVision camera: name (as in the PhotonVision UI) and where it sits on the robot. */
+    public record CamConfig(String name, Transform3d robotToCamera) {}
 
     // -- Camera transforms -- replace with measured values
-    private static final List<CamConfig> PHOTON_CAMERAS = List.of(
+    public static final List<CamConfig> PHOTON_CAMERAS = List.of(
         new CamConfig("Front Camera", new Transform3d(
             new Translation3d( 0.35,  0.00, 0.50), new Rotation3d(0, Math.toRadians(-10), 0))),
         new CamConfig("Back Camera",  new Transform3d(
@@ -84,13 +85,20 @@ public class VisionSubsystem extends SubsystemBase {
     // -- Std devs -- tune after field testing
     private static final Matrix<N3, N1> PV_MULTI_TAG  = VecBuilder.fill(0.4, 0.4, 0.6);
     private static final Matrix<N3, N1> PV_SINGLE_TAG = VecBuilder.fill(0.9, 0.9, 1.2);
-    private static final Matrix<N3, N1> LL3_STD_DEVS  = VecBuilder.fill(0.5, 0.5, 0.8);
+    // MegaTag2's yaw is just the heading WE sent it (robot_orientation_set) — not a
+    // measurement — so it must never correct our heading (θ std dev ≈ infinite).
+    // BUG FIX (2026-10, found in the simulator): θ was 0.8 rad, so while turning
+    // our own delayed heading pulled the estimate's heading off, and MegaTag2
+    // positions (which use that heading) went wrong by up to ~1 m.
+    private static final Matrix<N3, N1> LL3_STD_DEVS  = VecBuilder.fill(0.5, 0.5, 9999999);
+    /** Ignore MegaTag2 while spinning faster than this (Limelight guidance). */
+    private static final double MAX_MT2_YAW_RATE_DEG_S = 360.0;
     private static final double MAX_SINGLE_TAG_DIST_M  = 4.0;
 
     // -- LL4 distance calc
-    private static final double LL4_HEIGHT_M  = 0.55;
-    private static final double LL4_PITCH_DEG = 25.0;
-    private static final double HUB_HEIGHT_M  = 1.83;
+    public static final double LL4_HEIGHT_M  = 0.55;
+    public static final double LL4_PITCH_DEG = 25.0;
+    public static final double HUB_HEIGHT_M  = 1.83;
 
     private static final double JETSON_TIMEOUT_S = 3.0;
     private static final double LL_TIMEOUT_S     = 2.0;
@@ -117,6 +125,9 @@ public class VisionSubsystem extends SubsystemBase {
     private double     lastLL3Heartbeat     = -1;
     private double     lastLL4Heartbeat     = -1;
     private long       lastLL3FrameTime     = 0;
+    private double     lastHeadingDeg       = Double.NaN;
+    private double     lastHeadingTime      = 0;
+    private double     yawRateDegPerSec     = 0;
     private boolean    jetsonWasOnline     = false;
     private boolean    ll3WasOnline        = false;
     private boolean    ll4WasOnline        = false;
@@ -254,8 +265,18 @@ public class VisionSubsystem extends SubsystemBase {
     }
 
     private void updateRobotOrientationForLL3() {
+        double heading = headingSupplier.get().getDegrees();
+        double now = Timer.getFPGATimestamp();
+        if (!Double.isNaN(lastHeadingDeg) && now > lastHeadingTime) {
+            double d = Math.IEEEremainder(heading - lastHeadingDeg, 360.0);
+            // A jump this big in one loop is a pose reset (auto start, vision heading
+            // correction), not real spinning — the robot can't turn 30° in 20 ms.
+            yawRateDegPerSec = Math.abs(d) > 30.0 ? 0.0 : d / (now - lastHeadingTime);
+        }
+        lastHeadingDeg  = heading;
+        lastHeadingTime = now;
         ll3Table.getEntry("robot_orientation_set")
-                .setDoubleArray(new double[]{ headingSupplier.get().getDegrees(),0,0,0,0,0 });
+                .setDoubleArray(new double[]{ heading, yawRateDegPerSec, 0, 0, 0, 0 });
     }
 
     private void updatePhotonVision() {
@@ -308,6 +329,8 @@ public class VisionSubsystem extends SubsystemBase {
         double[] bp = bpEntry.getDoubleArray(new double[0]);
         // BUG FIX (2026-10): was bp[6] < 1, but [6] is latency, not tag count
         if (bp.length < 8 || bp[7] < 1) return;
+        // Spinning fast: the heading MegaTag2 used is already out of date → bad position
+        if (Math.abs(yawRateDegPerSec) > MAX_MT2_YAW_RATE_DEG_S) return;
         var pose = new Pose2d(bp[0], bp[1], Rotation2d.fromDegrees(bp[5]));
         if (!isOnField(pose)) return;
         // NT change time (µs, robot clock) minus capture+pipeline latency
@@ -348,6 +371,8 @@ public class VisionSubsystem extends SubsystemBase {
         setTargetMode(isRed ? TargetMode.HUB_RED : TargetMode.HUB_BLUE);
     }
     //  GETTERS
+    /** PhotonVision cameras that initialized (same order as PHOTON_CAMERAS). Used by the simulator. */
+    public List<PhotonCamera> getPhotonCameras() { return photonCameras; }
     public boolean    hasShooterTarget()        { return shooterHasTarget; }
     public double     getShooterTx()            { return shooterTx; }
     public double     getShooterTy()            { return shooterTy; }
