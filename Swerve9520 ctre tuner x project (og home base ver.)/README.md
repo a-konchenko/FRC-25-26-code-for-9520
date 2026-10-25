@@ -58,16 +58,19 @@ src/main/java/frc/robot/
 | Right stick X     | Rotation |
 | **A** (hold)      | Brake (X-lock wheels) |
 | **B** (hold)      | Auto-aim to current target |
-| **Y** (hold)      | Run shooter + feeder |
+| **Y** (hold)      | Spin up shooter; feeder starts automatically once at speed |
 | **X**             | Toggle intake on/off |
 | **LB**            | Reset field-centric heading |
 | **RB**            | Toggle hub ↔ trench targeting |
 | **LT** (hold)     | Intake arm down |
 | **RT** (hold)     | Intake arm up |
 | **D-pad ↑ / ↓**   | Both climbers up / down |
-| **D-pad ← / →**   | Left / right climber individually (direction toggled by D-pad center + X) |
+| **D-pad ← / →**   | Left / right climber individually |
+| **Right stick click** | Toggle individual climber direction (UP/DOWN) |
 | **Back + Y/X**    | SysId dynamic forward / reverse |
 | **Start + Y/X**   | SysId quasistatic forward / reverse |
+
+Stick mapping (default drive and auto-aim): **−LeftY = forward, −LeftX = left, −RightX = counter-clockwise** — see `driverVelocityX/Y` in RobotContainer.
 
 Max speed is currently scaled to **0.75×** for practice — see `MaxSpeed` in [RobotContainer.java:33](src/main/java/frc/robot/RobotContainer.java#L33). Bump back to `1.0` for competition.
 
@@ -101,3 +104,10 @@ The swerve module offsets, gear ratios, CAN IDs, and gains in [generated/TunerCo
 ## License
 
 WPILib portions are covered by the BSD-3 license in [WPILib-License.md](WPILib-License.md). Project license: see [LICENSE](../LICENSE) in the repo root.
+
+## Simulator
+
+This project runs in the Team 9520 autonomy simulator (truth vs estimate, drift,
+web UI). From the repository root run `./sim.sh` and open http://localhost:5173.
+See [docs/simulator.md](../docs/simulator.md). Simulator code lives in
+`src/main/java/frc/robot/sim/` and only runs in simulation.

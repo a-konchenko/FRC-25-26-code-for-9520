@@ -2,6 +2,13 @@ package frc.robot;
 
 import static edu.wpi.first.units.Units.*;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.DutyCycleOut;
 import com.ctre.phoenix6.hardware.TalonFX;
@@ -9,8 +16,13 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.auto.NamedCommands;
+import com.pathplanner.lib.commands.PathPlannerAuto;
+
 //import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -47,6 +59,12 @@ public class RobotContainer {
 
     // -- Auto chooser (Elastic picks this up as a combo box) --
     private final SendableChooser<Command> autoChooser = new SendableChooser<>();
+    /** Hand-written autos by name. Suppliers, so a fresh command can be built each time. */
+    private final Map<String, Supplier<Command>> m_handCodedAutos = new LinkedHashMap<>();
+    /** Names registered with PathPlanner's NamedCommands (shown in the simulator's Plan tab). */
+    private final List<String> m_namedCommandNames = new ArrayList<>();
+    /** Simulator only: the auto to run instead of the chooser selection (null = use chooser). */
+    private Command m_autoOverride = null;
 
     // -- Target mode chooser (Elastic combo box to switch LL4 pipeline) --
     private final SendableChooser<TargetMode> targetModeChooser = new SendableChooser<>();
@@ -95,13 +113,15 @@ public class RobotContainer {
     public RobotContainer() {
         autoAimCommand = new AutoAimCommand(
             drivetrain, vision,
-            () -> -joystick.getLeftY(),
-            () -> -joystick.getLeftX()
+            this::driverVelocityX,
+            this::driverVelocityY,
+            MaxSpeed * 0.1
         );
 
         configureIntake();
         configureIntakeArm();
         configureClimbers();
+        registerNamedCommands(); // must happen before any PathPlanner auto is built
         configureAuto();
         configureBindings();
     }
@@ -138,12 +158,84 @@ public class RobotContainer {
         m_climberRight.getConfigurator().apply(cfg);
     }
 
+    // -- Named commands (used by PathPlanner autos and path event markers) --
+    //
+    // Two ways to use them in PathPlanner:
+    //   * as a step in an .auto (runs in order) — anything is allowed
+    //   * as an EVENT MARKER on a path (runs WHILE the robot drives) — must NOT
+    //     require the drivetrain, or it would stop the path. Shooter/intake
+    //     commands are fine; AutoAim / AimAndShoot are auto steps only.
+    private void registerNamedCommands() {
+        // Turn in place until LL4 tx is zero (drivetrain — auto steps only)
+        var aimInPlace = new AutoAimCommand(drivetrain, vision, () -> 0.0, () -> 0.0, 0.0);
+        registerNamed("AutoAim", aimInPlace.until(aimInPlace::isAimed).withTimeout(2.0));
+        var aimThenShoot = new AutoAimCommand(drivetrain, vision, () -> 0.0, () -> 0.0, 0.0);
+        registerNamed("AimAndShoot", Commands.sequence(
+            aimThenShoot.until(aimThenShoot::isAimed).withTimeout(2.0),
+            shootFor(4.0)));
+
+        // Shooter / intake (safe as event markers)
+        registerNamed("SpinUp",      Commands.runOnce(shooter::spinUp, shooter));
+        registerNamed("Shoot",       shootFor(1.0));
+        registerNamed("ShootAll",    shootFor(4.0));
+        registerNamed("StopShooter", Commands.runOnce(shooter::stop, shooter));
+        registerNamed("IntakeOn",    Commands.runOnce(() -> setIntake(true)));
+        registerNamed("IntakeOff",   Commands.runOnce(() -> setIntake(false)));
+        registerNamed("ArmDown",     armFor(-kIntakeArmSpeed, 0.6));
+        registerNamed("ArmUp",       armFor( kIntakeArmSpeed, 0.6));
+
+        // Names already used by "Test path.path" event markers
+        registerNamed("WaitShoot1",   shootFor(1.0));
+        registerNamed("Waitshootall", shootFor(4.0));
+    }
+
+    private void registerNamed(String name, Command command) {
+        NamedCommands.registerCommand(name, command);
+        m_namedCommandNames.add(name);
+    }
+
+    /**
+     * Spin up (max 1.5 s, until at speed), then feed for feedSeconds, then stop.
+     * If the flywheel never reaches speed it feeds anyway after 1.5 s, so the
+     * robot still empties in auto.
+     */
+    private Command shootFor(double feedSeconds) {
+        return Commands.sequence(
+            Commands.run(shooter::spinUp, shooter).until(shooter::isAtSpeed).withTimeout(1.5),
+            Commands.run(shooter::feed, shooter).withTimeout(feedSeconds)
+        ).finallyDo(shooter::stop);
+    }
+
+    private Command armFor(double output, double seconds) {
+        return Commands.runEnd(
+            () -> m_intakeArmMotor.setControl(m_intakeArmDutyCycle.withOutput(output)),
+            () -> m_intakeArmMotor.setControl(m_intakeArmDutyCycle.withOutput(0.0))
+        ).withTimeout(seconds);
+    }
+
     // -- Auto config --
     private void configureAuto() {
-        autoChooser.setDefaultOption("Shoot All (Stationary)",
-            new ShootAllAuto(drivetrain, shooter, vision));
-        autoChooser.addOption("Do Nothing", Commands.none());
-        autoChooser.addOption("Drive Forward 5s", driveForwardAuto());
+        m_handCodedAutos.put("Shoot All (Stationary)", () -> new ShootAllAuto(drivetrain, shooter, vision));
+        m_handCodedAutos.put("Do Nothing",             Commands::none);
+        m_handCodedAutos.put("Drive Forward 5s",       this::driveForwardAuto);
+
+        boolean first = true;
+        for (var entry : m_handCodedAutos.entrySet()) {
+            if (first) autoChooser.setDefaultOption(entry.getKey(), entry.getValue().get());
+            else       autoChooser.addOption(entry.getKey(), entry.getValue().get());
+            first = false;
+        }
+
+        // PathPlanner autos: every deploy/pathplanner/autos/*.auto, shown as "PP: <name>"
+        if (AutoBuilder.isConfigured()) {
+            for (String name : AutoBuilder.getAllAutoNames()) {
+                try {
+                    autoChooser.addOption("PP: " + name, new PathPlannerAuto(name));
+                } catch (Exception e) {
+                    DriverStation.reportError("Could not load PathPlanner auto '" + name + "': " + e.getMessage(), false);
+                }
+            }
+        }
 
         SmartDashboard.putData("Auto Chooser", autoChooser);
 
@@ -172,13 +264,14 @@ public class RobotContainer {
     // -- Bindings --
     private void configureBindings() {
 
-        // Default drive: -LeftY = forward (VelocityX), -LeftX = left (VelocityY)
+        // Default drive: -LeftY = forward (VelocityX), -LeftX = left (VelocityY),
+        // -RightX = counter-clockwise. See driverVelocityX/Y/Rotation below.
         drivetrain.setDefaultCommand(
             drivetrain.applyRequest(() ->
                 drive
-                    .withVelocityX((joystick.getLeftX() * MaxSpeed))
-                    .withVelocityY((-joystick.getLeftY() * MaxSpeed))
-                    .withRotationalRate((joystick.getRightX() * MaxAngularRate))
+                    .withVelocityX(driverVelocityX())
+                    .withVelocityY(driverVelocityY())
+                    .withRotationalRate(driverRotationRate())
             )
         );
 
@@ -205,8 +298,12 @@ public class RobotContainer {
         // LB = Reset field-centric heading
         joystick.leftBumper().onTrue(drivetrain.runOnce(drivetrain::seedFieldCentric));
 
-        // Y = Shoot (hold to spin, release to stop)
-        joystick.y().whileTrue(Commands.runEnd(
+        // Y = Shoot (hold: spin up, feeds automatically once at speed; release to stop)
+        // Guarded from the SysId combos (Back/Start + Y).
+        joystick.y()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .whileTrue(Commands.runEnd(
             () -> shooter.runShooter(),
             () -> shooter.stop(),
             shooter
@@ -248,16 +345,35 @@ public class RobotContainer {
             () -> setClimberRight(m_climberIndividualDirectionUp ?  kClimberSpeed : -kClimberSpeed),
             () -> setClimberRight(0.0)));
 
-        // D-pad center + X = toggle climber direction
-        joystick.povCenter().and(joystick.x()).onTrue(
+        // Right stick click = toggle individual climber direction.
+        // BUG FIX (2026-10): this was D-pad center + X, but the D-pad is
+        // "center" whenever it isn't pressed, so every intake press (X)
+        // also flipped the climber direction.
+        joystick.rightStick().onTrue(
             Commands.runOnce(this::toggleClimberDirection));
 
         drivetrain.registerTelemetry(logger::telemeterize);
     }
 
+    // -- Driver stick mapping (one place, used by default drive AND auto-aim) --
+    // BUG FIX (2026-10): the default drive used X = LeftX, Y = -LeftY and an
+    // un-negated RightX, while AutoAim used X = -LeftY, Y = -LeftX at full
+    // speed — so the sticks changed meaning while B was held. Both now use
+    // the standard WPILib/CTRE mapping below.
+    // If the REAL robot drives sideways with this mapping, the swerve encoder
+    // offsets are 90 degrees off — re-zero them in Tuner X instead of
+    // swapping axes here.
+    private double driverVelocityX()    { return -joystick.getLeftY()  * MaxSpeed; }
+    private double driverVelocityY()    { return -joystick.getLeftX()  * MaxSpeed; }
+    private double driverRotationRate() { return -joystick.getRightX() * MaxAngularRate; }
+
     // -- Helpers --
     private void toggleIntake() {
-        m_intakeRunning = !m_intakeRunning;
+        setIntake(!m_intakeRunning);
+    }
+
+    public void setIntake(boolean running) {
+        m_intakeRunning = running;
         m_intakeMotor.setControl(
             m_intakeDutyCycle.withOutput(m_intakeRunning ? kIntakeSpeed : 0.0));
         SmartDashboard.putBoolean("Intake/Running", m_intakeRunning);
@@ -284,8 +400,15 @@ public class RobotContainer {
 
     // -- Autonomous --
     public Command getAutonomousCommand() {
-        return autoChooser.getSelected();
+        return m_autoOverride != null ? m_autoOverride : autoChooser.getSelected();
     }
+
+    /** Simulator only: run this command in the next autonomous instead of the chooser selection. */
+    public void setAutonomousOverride(Command command) { m_autoOverride = command; }
+
+    public Map<String, Supplier<Command>> getHandCodedAutos() { return Collections.unmodifiableMap(m_handCodedAutos); }
+
+    public List<String> getNamedCommandNames() { return Collections.unmodifiableList(m_namedCommandNames); }
 
     /**
      * Call from robotPeriodic(). Checks if the dashboard target mode

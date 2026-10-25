@@ -1,0 +1,117 @@
+package frc.robot.sim;
+
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Twist2d;
+import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
+import edu.wpi.first.math.kinematics.SwerveModulePosition;
+import edu.wpi.first.wpilibj.Timer;
+
+import com.ctre.phoenix6.swerve.SwerveDrivetrain.SwerveDriveState;
+
+import frc.robot.subsystems.CommandSwerveDrivetrain;
+
+/**
+ * ★ NEW (sim only) — where the robot REALLY is ("Truth").
+ *
+ * CTRE's swerve sim spins the simulated motors, and the robot code's pose
+ * estimator turns encoder + gyro readings into the "Estimate". This class
+ * receives the same module positions and gyro heading — every odometry sample
+ * (250 Hz, via the drivetrain's telemetry listener), exactly what the robot's
+ * odometry integrates — but sends the motion through
+ * the DriftModel before integrating it. With drift set to zero, Truth and
+ * Estimate are identical. Cameras (phase 3) look at the field from Truth, so
+ * vision pulls the Estimate back toward it.
+ */
+public class WorldModel {
+    private final CommandSwerveDrivetrain drivetrain;
+    private final SwerveDriveKinematics   kinematics;
+    private final DriftModel              drift;
+
+    private Pose2d                 truth = Pose2d.kZero;
+    private Pose2d                 estimateAtTruth = Pose2d.kZero;
+    private SwerveModulePosition[] lastPositions;
+    private Rotation2d             lastHeading;
+    private double                 lastTimestamp = Double.NaN;
+    private double                 lastSimTime = Double.NaN;
+    private double                 lastSpeed = 0.0;
+    private double                 accel = 0.0;
+    private volatile boolean       driftEnabled = true;
+
+    public WorldModel(CommandSwerveDrivetrain drivetrain, DriftModel drift) {
+        this.drivetrain = drivetrain;
+        this.kinematics = drivetrain.getKinematics();
+        this.drift      = drift;
+        capture(drivetrain.getStateCopy());
+        drivetrain.addTelemetryListener(this::onSample);
+    }
+
+    private void capture(SwerveDriveState state) {
+        lastPositions = copy(state.ModulePositions);
+        lastHeading   = state.RawHeading;
+        lastTimestamp = state.Timestamp;
+        estimateAtTruth = state.Pose;
+    }
+
+    /** Teleport Truth (does not touch the robot code's estimate). */
+    public synchronized void setTruth(Pose2d pose) {
+        truth = pose;
+        capture(drivetrain.getStateCopy());
+    }
+
+    /** Drift only accumulates while enabled (gyro bias would otherwise spin a parked robot). */
+    public void setDriftEnabled(boolean enabled) { driftEnabled = enabled; }
+
+    /** Runs on CTRE's odometry thread for every odometry sample. */
+    private synchronized void onSample(SwerveDriveState state) {
+        if (state.Timestamp == lastTimestamp) return;
+        SwerveModulePosition[] now = state.ModulePositions;
+        if (now == null || lastPositions == null || now.length != lastPositions.length
+                || Double.isNaN(lastTimestamp)) {
+            capture(state);
+            return;
+        }
+        // Robot (sim) time, which stops while the simulator is paused — so gyro
+        // bias doesn't accumulate during a pause.
+        double simNow = Timer.getFPGATimestamp();
+        double dt = Double.isNaN(lastSimTime) ? 0.0 : Math.max(0.0, simNow - lastSimTime);
+        lastSimTime = simNow;
+
+        // Robot-relative motion the encoders measured since the last sample
+        var deltas = new SwerveModulePosition[now.length];
+        for (int i = 0; i < now.length; i++) {
+            deltas[i] = new SwerveModulePosition(
+                now[i].distanceMeters - lastPositions[i].distanceMeters, now[i].angle);
+        }
+        Twist2d wheelTwist = kinematics.toTwist2d(deltas);
+
+        // Heading change the gyro measured (the pose estimator uses the gyro, not the wheels)
+        double dTheta = state.RawHeading.minus(lastHeading).getRadians();
+        Twist2d measured = new Twist2d(wheelTwist.dx, wheelTwist.dy, dTheta);
+
+        double speed = Math.hypot(state.Speeds.vxMetersPerSecond, state.Speeds.vyMetersPerSecond);
+        if (dt > 1e-6) accel = 0.8 * accel + 0.2 * Math.abs(speed - lastSpeed) / dt; // smoothed
+        lastSpeed = speed;
+
+        Twist2d real = driftEnabled ? drift.apply(measured, dt, accel) : measured;
+        truth = truth.exp(real);
+
+        capture(state);
+    }
+
+    public synchronized Pose2d getTruth() { return truth; }
+
+    /** {truth, estimate} from the SAME odometry sample, so errors aren't skewed by timing. */
+    public synchronized Pose2d[] getTruthAndEstimate() { return new Pose2d[] { truth, estimateAtTruth }; }
+    public double getAccelMps2()          { return accel; }
+
+    /** Lock shared with the poller thread — hold it while changing DriftModel state. */
+    public Object lock() { return this; }
+
+    private static SwerveModulePosition[] copy(SwerveModulePosition[] src) {
+        if (src == null) return null;
+        var out = new SwerveModulePosition[src.length];
+        for (int i = 0; i < src.length; i++) out[i] = src[i].copy();
+        return out;
+    }
+}

@@ -81,7 +81,9 @@ test {
 }
 
 // Simulation configuration (e.g. environment variables).
-wpi.sim.addGui().defaultEnabled = true
+// Pass -Pheadless to run without the WPILib sim GUI window (the web
+// simulator UI controls enable/mode itself). Default: GUI on.
+wpi.sim.addGui().defaultEnabled = !project.hasProperty('headless')
 wpi.sim.addDriverstation()
 
 // Setting up my Jar File. In this case, adding all libraries into the main jar ('fat jar')

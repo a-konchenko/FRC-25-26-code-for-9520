@@ -2,15 +2,21 @@ package frc.robot;
 
 import com.ctre.phoenix6.HootAutoReplay;
 
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 
+import frc.robot.sim.SimManager;
+
 public class Robot extends TimedRobot {
     private Command m_autonomousCommand;
 
     private final RobotContainer m_robotContainer;
+
+    /** Simulator (field, drift, cameras, web UI link). Null on the real robot. */
+    private final SimManager m_sim;
 
     private final HootAutoReplay m_timeAndJoystickReplay = new HootAutoReplay()
         .withTimestampReplay()
@@ -18,6 +24,7 @@ public class Robot extends TimedRobot {
 
     public Robot() {
         m_robotContainer = new RobotContainer();
+        m_sim = RobotBase.isSimulation() ? new SimManager(m_robotContainer) : null;
 
         // Expose the command scheduler so Elastic can show active commands
         SmartDashboard.putData("CommandScheduler", CommandScheduler.getInstance());
@@ -84,5 +91,7 @@ public class Robot extends TimedRobot {
     public void testExit() {}
 
     @Override
-    public void simulationPeriodic() {}
+    public void simulationPeriodic() {
+        m_sim.update();
+    }
 }

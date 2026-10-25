@@ -1,0 +1,878 @@
+{
+  "game": "2026 REBUILT",
+  "generatedBy": "sim-ui/scripts/gen-field.mjs",
+  "units": "meters, WPILib blue origin",
+  "symmetry": "rotational",
+  "startingLineFromWallM": 4.0284,
+  "autoDurationS": 20,
+  "fuelPreloadMax": 8,
+  "hubOpeningHeightM": 1.8288,
+  "robotRules": {
+    "maxPerimeterM": 2.794,
+    "maxHeightM": 0.762,
+    "maxBumperExtensionM": 0.1016,
+    "minBumperFoamM": 0.0571
+  },
+  "variants": {
+    "andymark": {
+      "length": 16.518,
+      "width": 8.043,
+      "hubCenters": {
+        "blue": [
+          4.6115,
+          4.0215
+        ],
+        "red": [
+          11.9065,
+          4.0215
+        ]
+      },
+      "elements": [
+        {
+          "id": "blue-hub",
+          "name": "HUB",
+          "type": "solid",
+          "heightM": 1.8288,
+          "poly": [
+            [
+              4.0146,
+              3.4246
+            ],
+            [
+              5.2084,
+              3.4246
+            ],
+            [
+              5.2084,
+              4.6184
+            ],
+            [
+              4.0146,
+              4.6184
+            ]
+          ],
+          "cite": "[GM] 47x47in; center from tags 18-21,24-27",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-bump-left",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              4.0476,
+              4.6184
+            ],
+            [
+              5.1754,
+              4.6184
+            ],
+            [
+              5.1754,
+              6.4726
+            ],
+            [
+              4.0476,
+              6.4726
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-bump-right",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              4.0476,
+              1.5704
+            ],
+            [
+              5.1754,
+              1.5704
+            ],
+            [
+              5.1754,
+              3.4246
+            ],
+            [
+              4.0476,
+              3.4246
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-trench-left",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              4.0146,
+              6.4726
+            ],
+            [
+              5.2084,
+              6.4726
+            ],
+            [
+              5.2084,
+              8.043
+            ],
+            [
+              4.0146,
+              8.043
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 22/23",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-trench-right",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              4.0146,
+              0
+            ],
+            [
+              5.2084,
+              0
+            ],
+            [
+              5.2084,
+              1.5704
+            ],
+            [
+              4.0146,
+              1.5704
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 17/28",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-tower",
+          "name": "TOWER",
+          "type": "solid",
+          "heightM": 1.98755,
+          "poly": [
+            [
+              0,
+              3.4507
+            ],
+            [
+              1.1476,
+              3.4507
+            ],
+            [
+              1.1476,
+              4.4413
+            ],
+            [
+              0,
+              4.4413
+            ]
+          ],
+          "cite": "[GM] base 39.0x45.18in; center from tags 31/32",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-outpost",
+          "name": "OUTPOST",
+          "type": "marking",
+          "poly": [
+            [
+              0,
+              0.4123
+            ],
+            [
+              0.15,
+              0.4123
+            ],
+            [
+              0.15,
+              1.3217
+            ],
+            [
+              0,
+              1.3217
+            ]
+          ],
+          "cite": "[GM] corral 35.8in wide; center from tags 29/30",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-depot",
+          "name": "DEPOT",
+          "type": "marking",
+          "approx": true,
+          "poly": [
+            [
+              0,
+              5.4266
+            ],
+            [
+              0.6858,
+              5.4266
+            ],
+            [
+              0.6858,
+              6.4934
+            ],
+            [
+              0,
+              6.4934
+            ]
+          ],
+          "cite": "[GM] 42.0x27.0in along alliance wall; Y position approx",
+          "alliance": "blue"
+        },
+        {
+          "id": "red-hub",
+          "name": "HUB",
+          "type": "solid",
+          "heightM": 1.8288,
+          "poly": [
+            [
+              12.5034,
+              4.6184
+            ],
+            [
+              11.3096,
+              4.6184
+            ],
+            [
+              11.3096,
+              3.4246
+            ],
+            [
+              12.5034,
+              3.4246
+            ]
+          ],
+          "cite": "[GM] 47x47in; center from tags 18-21,24-27",
+          "alliance": "red"
+        },
+        {
+          "id": "red-bump-left",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              12.4704,
+              3.4246
+            ],
+            [
+              11.3426,
+              3.4246
+            ],
+            [
+              11.3426,
+              1.5704
+            ],
+            [
+              12.4704,
+              1.5704
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "red"
+        },
+        {
+          "id": "red-bump-right",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              12.4704,
+              6.4726
+            ],
+            [
+              11.3426,
+              6.4726
+            ],
+            [
+              11.3426,
+              4.6184
+            ],
+            [
+              12.4704,
+              4.6184
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "red"
+        },
+        {
+          "id": "red-trench-left",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              12.5034,
+              1.5704
+            ],
+            [
+              11.3096,
+              1.5704
+            ],
+            [
+              11.3096,
+              0
+            ],
+            [
+              12.5034,
+              0
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 22/23",
+          "alliance": "red"
+        },
+        {
+          "id": "red-trench-right",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              12.5034,
+              8.043
+            ],
+            [
+              11.3096,
+              8.043
+            ],
+            [
+              11.3096,
+              6.4726
+            ],
+            [
+              12.5034,
+              6.4726
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 17/28",
+          "alliance": "red"
+        },
+        {
+          "id": "red-tower",
+          "name": "TOWER",
+          "type": "solid",
+          "heightM": 1.98755,
+          "poly": [
+            [
+              16.518,
+              4.5923
+            ],
+            [
+              15.3704,
+              4.5923
+            ],
+            [
+              15.3704,
+              3.6017
+            ],
+            [
+              16.518,
+              3.6017
+            ]
+          ],
+          "cite": "[GM] base 39.0x45.18in; center from tags 31/32",
+          "alliance": "red"
+        },
+        {
+          "id": "red-outpost",
+          "name": "OUTPOST",
+          "type": "marking",
+          "poly": [
+            [
+              16.518,
+              7.6307
+            ],
+            [
+              16.368,
+              7.6307
+            ],
+            [
+              16.368,
+              6.7213
+            ],
+            [
+              16.518,
+              6.7213
+            ]
+          ],
+          "cite": "[GM] corral 35.8in wide; center from tags 29/30",
+          "alliance": "red"
+        },
+        {
+          "id": "red-depot",
+          "name": "DEPOT",
+          "type": "marking",
+          "approx": true,
+          "poly": [
+            [
+              16.518,
+              2.6164
+            ],
+            [
+              15.8322,
+              2.6164
+            ],
+            [
+              15.8322,
+              1.5496
+            ],
+            [
+              16.518,
+              1.5496
+            ]
+          ],
+          "cite": "[GM] 42.0x27.0in along alliance wall; Y position approx",
+          "alliance": "red"
+        }
+      ]
+    },
+    "welded": {
+      "length": 16.541,
+      "width": 8.069,
+      "hubCenters": {
+        "blue": [
+          4.6255,
+          4.0345
+        ],
+        "red": [
+          11.9155,
+          4.0345
+        ]
+      },
+      "elements": [
+        {
+          "id": "blue-hub",
+          "name": "HUB",
+          "type": "solid",
+          "heightM": 1.8288,
+          "poly": [
+            [
+              4.0286,
+              3.4376
+            ],
+            [
+              5.2224,
+              3.4376
+            ],
+            [
+              5.2224,
+              4.6314
+            ],
+            [
+              4.0286,
+              4.6314
+            ]
+          ],
+          "cite": "[GM] 47x47in; center from tags 18-21,24-27",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-bump-left",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              4.0616,
+              4.6314
+            ],
+            [
+              5.1894,
+              4.6314
+            ],
+            [
+              5.1894,
+              6.4856
+            ],
+            [
+              4.0616,
+              6.4856
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-bump-right",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              4.0616,
+              1.5834
+            ],
+            [
+              5.1894,
+              1.5834
+            ],
+            [
+              5.1894,
+              3.4376
+            ],
+            [
+              4.0616,
+              3.4376
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-trench-left",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              4.0286,
+              6.4856
+            ],
+            [
+              5.2224,
+              6.4856
+            ],
+            [
+              5.2224,
+              8.069
+            ],
+            [
+              4.0286,
+              8.069
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 22/23",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-trench-right",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              4.0286,
+              0
+            ],
+            [
+              5.2224,
+              0
+            ],
+            [
+              5.2224,
+              1.5834
+            ],
+            [
+              4.0286,
+              1.5834
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 17/28",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-tower",
+          "name": "TOWER",
+          "type": "solid",
+          "heightM": 1.98755,
+          "poly": [
+            [
+              0,
+              3.4667
+            ],
+            [
+              1.1476,
+              3.4667
+            ],
+            [
+              1.1476,
+              4.4573
+            ],
+            [
+              0,
+              4.4573
+            ]
+          ],
+          "cite": "[GM] base 39.0x45.18in; center from tags 31/32",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-outpost",
+          "name": "OUTPOST",
+          "type": "marking",
+          "poly": [
+            [
+              0,
+              0.4273
+            ],
+            [
+              0.15,
+              0.4273
+            ],
+            [
+              0.15,
+              1.3367
+            ],
+            [
+              0,
+              1.3367
+            ]
+          ],
+          "cite": "[GM] corral 35.8in wide; center from tags 29/30",
+          "alliance": "blue"
+        },
+        {
+          "id": "blue-depot",
+          "name": "DEPOT",
+          "type": "marking",
+          "approx": true,
+          "poly": [
+            [
+              0,
+              5.4266
+            ],
+            [
+              0.6858,
+              5.4266
+            ],
+            [
+              0.6858,
+              6.4934
+            ],
+            [
+              0,
+              6.4934
+            ]
+          ],
+          "cite": "[GM] 42.0x27.0in along alliance wall; Y position approx",
+          "alliance": "blue"
+        },
+        {
+          "id": "red-hub",
+          "name": "HUB",
+          "type": "solid",
+          "heightM": 1.8288,
+          "poly": [
+            [
+              12.5124,
+              4.6314
+            ],
+            [
+              11.3186,
+              4.6314
+            ],
+            [
+              11.3186,
+              3.4376
+            ],
+            [
+              12.5124,
+              3.4376
+            ]
+          ],
+          "cite": "[GM] 47x47in; center from tags 18-21,24-27",
+          "alliance": "red"
+        },
+        {
+          "id": "red-bump-left",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              12.4794,
+              3.4376
+            ],
+            [
+              11.3516,
+              3.4376
+            ],
+            [
+              11.3516,
+              1.5834
+            ],
+            [
+              12.4794,
+              1.5834
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "red"
+        },
+        {
+          "id": "red-bump-right",
+          "name": "BUMP",
+          "type": "bump",
+          "heightM": 0.1654302,
+          "poly": [
+            [
+              12.4794,
+              6.4856
+            ],
+            [
+              11.3516,
+              6.4856
+            ],
+            [
+              11.3516,
+              4.6314
+            ],
+            [
+              12.4794,
+              4.6314
+            ]
+          ],
+          "cite": "[GM] 73.0x44.4in, beside HUB",
+          "alliance": "red"
+        },
+        {
+          "id": "red-trench-left",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              12.5124,
+              1.5834
+            ],
+            [
+              11.3186,
+              1.5834
+            ],
+            [
+              11.3186,
+              0
+            ],
+            [
+              12.5124,
+              0
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 22/23",
+          "alliance": "red"
+        },
+        {
+          "id": "red-trench-right",
+          "name": "TRENCH",
+          "type": "low-clearance",
+          "heightM": 0.5651499999999999,
+          "poly": [
+            [
+              12.5124,
+              8.069
+            ],
+            [
+              11.3186,
+              8.069
+            ],
+            [
+              11.3186,
+              6.4856
+            ],
+            [
+              12.5124,
+              6.4856
+            ]
+          ],
+          "cite": "[GM] 65.65x47.0in, guardrail→BUMP; tags 17/28",
+          "alliance": "red"
+        },
+        {
+          "id": "red-tower",
+          "name": "TOWER",
+          "type": "solid",
+          "heightM": 1.98755,
+          "poly": [
+            [
+              16.541,
+              4.6023
+            ],
+            [
+              15.3934,
+              4.6023
+            ],
+            [
+              15.3934,
+              3.6117
+            ],
+            [
+              16.541,
+              3.6117
+            ]
+          ],
+          "cite": "[GM] base 39.0x45.18in; center from tags 31/32",
+          "alliance": "red"
+        },
+        {
+          "id": "red-outpost",
+          "name": "OUTPOST",
+          "type": "marking",
+          "poly": [
+            [
+              16.541,
+              7.6417
+            ],
+            [
+              16.391,
+              7.6417
+            ],
+            [
+              16.391,
+              6.7323
+            ],
+            [
+              16.541,
+              6.7323
+            ]
+          ],
+          "cite": "[GM] corral 35.8in wide; center from tags 29/30",
+          "alliance": "red"
+        },
+        {
+          "id": "red-depot",
+          "name": "DEPOT",
+          "type": "marking",
+          "approx": true,
+          "poly": [
+            [
+              16.541,
+              2.6424
+            ],
+            [
+              15.8552,
+              2.6424
+            ],
+            [
+              15.8552,
+              1.5756
+            ],
+            [
+              16.541,
+              1.5756
+            ]
+          ],
+          "cite": "[GM] 42.0x27.0in along alliance wall; Y position approx",
+          "alliance": "red"
+        }
+      ]
+    }
+  }
+}

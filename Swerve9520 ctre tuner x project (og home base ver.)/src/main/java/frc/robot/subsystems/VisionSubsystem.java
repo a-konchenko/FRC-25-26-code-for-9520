@@ -113,6 +113,10 @@ public class VisionSubsystem extends SubsystemBase {
     private double     lastJetsonUpdateTime = 0.0;
     private double     lastLL3UpdateTime    = 0.0;
     private double     lastLL4UpdateTime    = 0.0;
+    private double     lastLL3PoseTime      = 0.0;
+    private double     lastLL3Heartbeat     = -1;
+    private double     lastLL4Heartbeat     = -1;
+    private long       lastLL3FrameTime     = 0;
     private boolean    jetsonWasOnline     = false;
     private boolean    ll3WasOnline        = false;
     private boolean    ll4WasOnline        = false;
@@ -284,15 +288,32 @@ public class VisionSubsystem extends SubsystemBase {
         }
     }
 
+    // botpose array layout (Limelight docs):
+    //   [0..5] x, y, z, roll, pitch, yaw   [6] total latency ms   [7] tag count
+    //   [8] tag span   [9] avg tag distance   [10] avg tag area
     private void updateLimelight3() {
-        double[] bp = ll3Table.getEntry("botpose_orb_wpiblue").getDoubleArray(new double[0]);
-        if (bp.length < 7 || bp[6] < 1) return;
+        // Online = heartbeat still changing (works even when no tags are seen)
+        double hb3 = ll3Table.getEntry("hb").getDouble(-1);
+        if (hb3 >= 0 && hb3 != lastLL3Heartbeat) {
+            lastLL3Heartbeat  = hb3;
+            lastLL3UpdateTime = Timer.getFPGATimestamp();
+        }
+
+        NetworkTableEntry bpEntry = ll3Table.getEntry("botpose_orb_wpiblue");
+        // Only use each camera frame once (the entry keeps its last value between frames)
+        long changed = bpEntry.getLastChange();
+        if (changed == lastLL3FrameTime) return;
+        lastLL3FrameTime = changed;
+
+        double[] bp = bpEntry.getDoubleArray(new double[0]);
+        // BUG FIX (2026-10): was bp[6] < 1, but [6] is latency, not tag count
+        if (bp.length < 8 || bp[7] < 1) return;
         var pose = new Pose2d(bp[0], bp[1], Rotation2d.fromDegrees(bp[5]));
         if (!isOnField(pose)) return;
-        double ts = Timer.getFPGATimestamp()
-            - (ll3Table.getEntry("tl").getDouble(0) + ll3Table.getEntry("cl").getDouble(0)) / 1000.0;
+        // NT change time (µs, robot clock) minus capture+pipeline latency
+        double ts = changed / 1e6 - bp[6] / 1000.0;
         poseConsumer.addVisionMeasurement(pose, ts, LL3_STD_DEVS);
-        lastLL3UpdateTime = Timer.getFPGATimestamp();
+        lastLL3PoseTime = Timer.getFPGATimestamp();
     }
 
     private void updateLimelight4() {
@@ -301,8 +322,11 @@ public class VisionSubsystem extends SubsystemBase {
         shooterTy        = ll4Table.getEntry("ty").getDouble(0);
         shooterTa        = ll4Table.getEntry("ta").getDouble(0);
 
-        double hb = ll4Table.getEntry("hb").getDouble(0);
-        if (hb > 0) {
+        // BUG FIX (2026-10): was "hb > 0", which stays true forever after the
+        // camera disconnects. Online now means the heartbeat is still changing.
+        double hb = ll4Table.getEntry("hb").getDouble(-1);
+        if (hb >= 0 && hb != lastLL4Heartbeat) {
+            lastLL4Heartbeat  = hb;
             lastLL4UpdateTime = Timer.getFPGATimestamp();
         }
     }
@@ -373,6 +397,8 @@ public class VisionSubsystem extends SubsystemBase {
         SmartDashboard.putString ("Status/Target Mode",        currentMode.name());
         SmartDashboard.putString ("Status/Vision Mode",
             isJetsonOnline() ? "Full (Jetson+LL3)" : "Fallback (LL3 only)");
+        SmartDashboard.putBoolean("Status/LL3 Pose Active",
+            lastLL3PoseTime > 0 && (Timer.getFPGATimestamp() - lastLL3PoseTime) < LL_TIMEOUT_S);
         SmartDashboard.putNumber ("Vision/LL4 TX",             shooterTx);
         SmartDashboard.putNumber ("Vision/LL4 TY",             shooterTy);
         SmartDashboard.putNumber ("Vision/LL4 TA",             shooterTa);

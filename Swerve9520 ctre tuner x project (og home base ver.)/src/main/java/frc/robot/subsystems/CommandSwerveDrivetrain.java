@@ -2,7 +2,10 @@ package frc.robot.subsystems;
 
 import static edu.wpi.first.units.Units.*;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import com.ctre.phoenix6.SignalLogger;
@@ -11,15 +14,25 @@ import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
+import com.pathplanner.lib.util.FlippingUtil;
+
+import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.apriltag.AprilTagFields;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
@@ -44,6 +57,14 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private static final Rotation2d kRedAlliancePerspectiveRotation = Rotation2d.k180deg;
     /* Keep track if we've ever applied the operator perspective before or not */
     private boolean m_hasAppliedOperatorPerspective = false;
+
+    /* Telemetry: the robot code's consumer (Telemetry.java) plus extra listeners (the simulator) */
+    private volatile Consumer<SwerveDriveState> m_telemetryConsumer = null;
+    private final List<Consumer<SwerveDriveState>> m_telemetryListeners = new CopyOnWriteArrayList<>();
+    private boolean m_telemetryHooked = false;
+
+    /* Swerve request to apply during PathPlanner path following */
+    private final SwerveRequest.ApplyRobotSpeeds m_pathApplyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
 
     /* Swerve requests to apply during SysId characterization */
     private final SwerveRequest.SysIdSwerveTranslation m_translationCharacterization = new SwerveRequest.SysIdSwerveTranslation();
@@ -132,6 +153,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         if (Utils.isSimulation()) {
             startSimThread();
         }
+        configureAutoBuilder();
     }
 
     /**
@@ -156,6 +178,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         if (Utils.isSimulation()) {
             startSimThread();
         }
+        configureAutoBuilder();
     }
 
     /**
@@ -188,6 +211,83 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         if (Utils.isSimulation()) {
             startSimThread();
         }
+        configureAutoBuilder();
+    }
+
+    /**
+     * Sets up PathPlanner so paths and autos (.path / .auto files in
+     * deploy/pathplanner) can drive this drivetrain. Standard CTRE + PathPlanner
+     * pattern. Robot mass, MOI, wheel and module data come from
+     * deploy/pathplanner/settings.json (PathPlanner app → Settings, or the
+     * simulator's Plan tab → Robot settings).
+     */
+    private void configureAutoBuilder() {
+        try {
+            // 2026 REBUILT is rotationally symmetric. Mirror red paths about the
+            // center of the same field layout the vision code uses (AndyMark).
+            var layout = AprilTagFieldLayout.loadField(AprilTagFields.k2026RebuiltAndymark);
+            FlippingUtil.symmetryType = FlippingUtil.FieldSymmetry.kRotational;
+            FlippingUtil.fieldSizeX = layout.getFieldLength();
+            FlippingUtil.fieldSizeY = layout.getFieldWidth();
+
+            var config = RobotConfig.fromGUISettings();
+            AutoBuilder.configure(
+                () -> getState().Pose,   // Supplier of current robot pose
+                this::resetPose,         // Consumer for seeding pose against auto
+                () -> getState().Speeds, // Supplier of current robot speeds
+                // Consumer of ChassisSpeeds and feedforwards to drive the robot
+                (speeds, feedforwards) -> setControl(
+                    m_pathApplyRobotSpeeds.withSpeeds(ChassisSpeeds.discretize(speeds, 0.020))
+                        .withWheelForceFeedforwardsX(feedforwards.robotRelativeForcesXNewtons())
+                        .withWheelForceFeedforwardsY(feedforwards.robotRelativeForcesYNewtons())
+                ),
+                new PPHolonomicDriveController(
+                    // PID constants for translation
+                    new PIDConstants(10, 0, 0),
+                    // PID constants for rotation
+                    new PIDConstants(7, 0, 0)
+                ),
+                config,
+                // Assume the path needs to be flipped for Red vs Blue, this is normally the case
+                () -> DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red,
+                this // Subsystem for requirements
+            );
+        } catch (Exception ex) {
+            DriverStation.reportError("Failed to load PathPlanner config and configure AutoBuilder", ex.getStackTrace());
+        }
+    }
+
+    /**
+     * CTRE allows only one telemetry function. Keep the robot code's one and
+     * also call any extra listeners (see addTelemetryListener).
+     */
+    @Override
+    public void registerTelemetry(Consumer<SwerveDriveState> telemetryFunction) {
+        m_telemetryConsumer = telemetryFunction;
+        hookTelemetry();
+    }
+
+    /**
+     * Extra listener called on EVERY odometry update (250 Hz), on the odometry
+     * thread. Used by the simulator's world model; does nothing on the robot
+     * unless something registers.
+     */
+    public void addTelemetryListener(Consumer<SwerveDriveState> listener) {
+        m_telemetryListeners.add(listener);
+        hookTelemetry();
+    }
+
+    private synchronized void hookTelemetry() {
+        if (!m_telemetryHooked) {
+            super.registerTelemetry(this::dispatchTelemetry);
+            m_telemetryHooked = true;
+        }
+    }
+
+    private void dispatchTelemetry(SwerveDriveState state) {
+        var consumer = m_telemetryConsumer;
+        if (consumer != null) consumer.accept(state);
+        for (var listener : m_telemetryListeners) listener.accept(state);
     }
 
     /**
@@ -244,13 +344,20 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     }
 
     private void startSimThread() {
-        m_lastSimTime = Utils.getCurrentTimeSeconds();
+        /*
+         * Sim-only change for the web simulator: use WPILib's clock (which
+         * stops when the simulator is paused via SimHooks) instead of
+         * Utils.getCurrentTimeSeconds() (wall clock), and clamp each step, so
+         * pausing/stepping doesn't make the robot jump forward on resume.
+         */
+        m_lastSimTime = Timer.getFPGATimestamp();
 
         /* Run simulation at a faster rate so PID gains behave more reasonably */
         m_simNotifier = new Notifier(() -> {
-            final double currentTime = Utils.getCurrentTimeSeconds();
-            double deltaTime = currentTime - m_lastSimTime;
+            final double currentTime = Timer.getFPGATimestamp();
+            double deltaTime = Math.min(currentTime - m_lastSimTime, 0.02);
             m_lastSimTime = currentTime;
+            if (deltaTime <= 0) return;
 
             /* use the measured time delta, get battery voltage from WPILib */
             updateSimState(deltaTime, RobotController.getBatteryVoltage());
