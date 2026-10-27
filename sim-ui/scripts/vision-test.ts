@@ -22,8 +22,10 @@ console.log('  fused measurements in ring:', (g('Vision/fused') ?? []).length / 
 
 // 2. Same kidnap with cameras OFF — no correction
 set('cam/ll3/enabled', 0); act('syncTruth'); await sleep(300);
+const before = g('TruthEstimate') as number[];
 act('kidnap', [2.6, 4.6, 0]); await sleep(2000);
-console.log(`cameras OFF, 2 s after kidnap: localization error ${loc().toFixed(1)} cm (should stay ~60)`);
+const jump = Math.hypot(2.6 - before[0], 4.6 - before[1]) * 100;
+console.log(`cameras OFF, 2 s after kidnap: localization error ${loc().toFixed(1)} cm (should stay at the ${jump.toFixed(0)} cm kidnap distance)`);
 set('cam/ll3/enabled', 1); await sleep(2500);
 console.log(`cameras back ON, 2.5 s later: ${loc().toFixed(1)} cm`);
 

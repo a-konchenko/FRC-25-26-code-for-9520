@@ -1,0 +1,54 @@
+{
+  // Open this file in WPILib VS Code (File → Open Workspace from File…).
+  // The WPILib extension only finds a robot project whose .wpilib/ folder is at
+  // the top of a workspace folder, so the robot project is its own folder here.
+  // Opening just the repository root folder hides the WPILib commands.
+  "folders": [
+    { "name": "Robot code", "path": "Swerve9520 ctre tuner x project (og home base ver.)" },
+    { "name": "Sim UI", "path": "sim-ui" },
+    { "name": "Repo (docs, sim.sh)", "path": "." }
+  ],
+  "settings": {
+    // The repo root contains the other two folders; hide them there so files
+    // aren't listed twice and the Java extension imports the robot project once.
+    "files.exclude": {
+      "Swerve9520 ctre tuner x project (og home base ver.)": true,
+      "sim-ui": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/build": true,
+      "**/.gradle": true
+    }
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Simulator: robot sim + web UI",
+        "detail": "./sim.sh — then open http://localhost:5173",
+        "type": "shell",
+        "command": "./sim.sh",
+        "options": { "cwd": "${workspaceFolder:Repo (docs, sim.sh)}" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Simulator: headless (no WPILib GUI)",
+        "detail": "./sim.sh --headless",
+        "type": "shell",
+        "command": "./sim.sh --headless",
+        "options": { "cwd": "${workspaceFolder:Repo (docs, sim.sh)}" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Sim UI: typecheck",
+        "type": "shell",
+        "command": "npm run typecheck",
+        "options": { "cwd": "${workspaceFolder:Sim UI}" },
+        "problemMatcher": ["$tsc"]
+      }
+    ]
+  }
+}

@@ -35,6 +35,11 @@ cd "Swerve9520 ctre tuner x project (og home base ver.)"
 cd sim-ui && npm install && npm run dev
 ```
 
+**VS Code:** open `FRC-9520.code-workspace` (File → Open Workspace from File…) in
+WPILib VS Code, not the repository folder. The WPILib commands (Build, Simulate,
+Deploy) only work when the robot project is a top-level workspace folder. The
+workspace also has tasks (Terminal → Run Task…) that start the simulator.
+
 The web UI connects to the robot sim over NetworkTables on port 5810, the same
 way Elastic does. To view a sim running on another laptop: `http://localhost:5173/?robot=<ip>`.
 

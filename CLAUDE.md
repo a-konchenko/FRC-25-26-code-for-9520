@@ -9,6 +9,8 @@ Two projects live side by side:
 - **`Swerve9520 ctre tuner x project (og home base ver.)/`** — the FRC Team 9520 robot code (WPILib 2026 / GradleRIO 2026.2.1, Java 17, CTRE Phoenix 6 swerve, PathPlanner, Limelight/PhotonLib). The directory name has spaces and parentheses: always quote it in shell commands.
 - **`sim-ui/`** — web UI for the autonomy simulator (Vite + React 18 + TypeScript), talking NetworkTables 4 to the robot code running under `simulateJava`.
 
+Open `FRC-9520.code-workspace` in VS Code rather than the repo root: the WPILib extension only recognizes the robot project when it is a top-level workspace folder.
+
 `docs/simulator.md` is the authoritative simulator spec: architecture, drift model, the full `/Sim` NetworkTables contract, field data sources, placeholder constants, and the phased roadmap. Read it before changing simulator code, and keep it updated (the "Blocks created for the simulator" and "Robot code changes" tables, roadmap status) when you change behavior.
 
 ## Commands

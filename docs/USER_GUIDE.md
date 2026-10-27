@@ -146,9 +146,15 @@ The simulator has two halves that run at the same time:
 5. Open a web browser (Chrome works best) and go to **http://localhost:5173**.
 6. In the top-right corner of the page you should see **● robot sim connected** in green.
 
+### Opening the code in Visual Studio Code
+
+In WPILib Visual Studio Code, choose **File → Open Workspace from File…** and pick `FRC-9520.code-workspace` in the code folder. Don't just open the folder itself: then the **WPILib** commands (Build, Simulate, Deploy) can't find the robot program.
+
+On a Mac you can also start the simulator from there: **Terminal → Run Task… → Simulator: headless (no WPILib GUI)**, then open **http://localhost:5173**.
+
 ### Starting (Windows, or without the script)
 
-1. Open the code folder in WPILib Visual Studio Code, press **Ctrl+Shift+P**, and choose **WPILib: Simulate Robot Code**. ([WPILib: simulation introduction](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation/introduction.html))
+1. Open `FRC-9520.code-workspace` in WPILib Visual Studio Code (see above), press **Ctrl+Shift+P**, and choose **WPILib: Simulate Robot Code**. ([WPILib: simulation introduction](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation/introduction.html))
 2. In a separate terminal, go into the `sim-ui` folder and run `npm install` (first time only) and then `npm run dev`.
 3. Open **http://localhost:5173**.
 
