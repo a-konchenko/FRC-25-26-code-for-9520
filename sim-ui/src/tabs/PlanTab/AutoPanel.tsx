@@ -12,6 +12,8 @@ interface Props {
 }
 
 const GROUPS: PPCommandType[] = ['sequential', 'parallel', 'race', 'deadline'];
+/** Length of a new wait step (seconds); edit it in the step afterwards. */
+const DEFAULT_WAIT_S = 3.0;
 const GROUP_HELP: Record<string, string> = {
   sequential: 'one after another',
   parallel: 'all at once, until all finish',
@@ -70,7 +72,7 @@ function CommandNode({ cmd, onChange, onDelete, onMove, pathNames, names, depth 
     if (GROUPS.includes(type)) onChange({ type, data: { commands: isGroup ? children : [cmd] } });
     else if (type === 'path') onChange({ type, data: { pathName: pathNames[0] ?? '' } });
     else if (type === 'named') onChange({ type, data: { name: names[0] ?? '' } });
-    else onChange({ type: 'wait', data: { waitTime: 1.0 } });
+    else onChange({ type: 'wait', data: { waitTime: DEFAULT_WAIT_S } });
   };
 
   return (
@@ -125,7 +127,7 @@ function CommandNode({ cmd, onChange, onDelete, onMove, pathNames, names, depth 
           <div className="cmd-add">
             <button className="small-btn" onClick={() => addChild({ type: 'path', data: { pathName: pathNames[0] ?? '' } })}>＋ path</button>
             <button className="small-btn" onClick={() => addChild({ type: 'named', data: { name: names[0] ?? '' } })}>＋ named</button>
-            <button className="small-btn" onClick={() => addChild({ type: 'wait', data: { waitTime: 1.0 } })}>＋ wait</button>
+            <button className="small-btn" onClick={() => addChild({ type: 'wait', data: { waitTime: DEFAULT_WAIT_S } })} title={`Wait ${DEFAULT_WAIT_S} s (change the number after adding)`}>＋ wait {DEFAULT_WAIT_S} s</button>
             <button className="small-btn" onClick={() => addChild({ type: 'parallel', data: { commands: [] } })}>＋ group</button>
           </div>
         </div>

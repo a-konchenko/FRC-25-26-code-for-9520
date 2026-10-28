@@ -19,9 +19,10 @@ import { CAM_DEFAULTS, FUEL_DEFAULTS, type CamKey, type CamSettings, type FuelSe
 import { VisionLayer } from './VisionLayer';
 import { CameraPanel } from './CameraPanel';
 import { MechPanel } from './MechPanel';
+import { FuelLayer } from './FuelLayer';
 
 type Tool = 'none' | 'place' | 'kidnap';
-interface Layers { plan: boolean; setpoint: boolean; truth: boolean; estimate: boolean; traces: boolean; tags: boolean; cameras: boolean; vision: boolean; shots: boolean; }
+interface Layers { plan: boolean; setpoint: boolean; truth: boolean; estimate: boolean; traces: boolean; tags: boolean; cameras: boolean; vision: boolean; shots: boolean; fuel: boolean; }
 interface Placement { x: number; y: number; deg: number; } // placement error, cm / cm / degrees
 
 const KIND_LABEL: Record<RunKind, string> = { 0: 'Auto', 1: 'Path', 2: 'Hand-coded' };
@@ -60,7 +61,7 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
   // ── settings (persisted per browser) ──────────────────────────────────────
   const [drift, setDrift] = useState<DriftSettings>(() => load('drift', DRIFT_PRESETS.welltuned.s));
   const [seed, setSeed] = useState<number>(() => load('seed', 9520));
-  const [layers, setLayers] = useState<Layers>(() => load('runLayers2', { plan: true, setpoint: true, truth: true, estimate: true, traces: true, tags: true, cameras: true, vision: true, shots: true }));
+  const [layers, setLayers] = useState<Layers>(() => load('runLayers2', { plan: true, setpoint: true, truth: true, estimate: true, traces: true, tags: true, cameras: true, vision: true, shots: true, fuel: true }));
   // Merge per camera, so a setting added later still gets its default
   const [cams, setCams] = useState<Record<CamKey, CamSettings>>(() => {
     const stored = load('cams', CAM_DEFAULTS);
@@ -75,6 +76,7 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
   }, [cams]);
   useEffect(() => { save('fuel', fuel); for (const [k, v] of Object.entries(fuel)) setSetting(`fuel/${k}`, v); }, [fuel]);
   const fuelState = useNT<number[]>('/Sim/Fuel/state', [0, 0, 0, 0]);
+  const intakeRunning = useNT<boolean>('/SmartDashboard/Intake/Running', false);
   const [kind, setKind] = useState<RunKind>(() => load('runKind', 1 as RunKind));
   const [names, setNames] = useState<Record<RunKind, string>>(() => load('runNames', { 0: '', 1: 'Test path', 2: 'Shoot All (Stationary)' }));
   const [red, setRed] = useState<boolean>(() => load('runRed', false));
@@ -255,6 +257,8 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
           <span className="toolbar-sep" />
           <button onClick={() => { clearTraces(); sendAction('testDrive', [1]); }} disabled={!connected}>Test: square</button>
           <button onClick={() => { clearTraces(); sendAction('testDrive', [2]); }} disabled={!connected}>Test: spin</button>
+          <button className={intakeRunning ? 'active' : ''} onClick={() => sendAction('intake', [intakeRunning ? 0 : 1])} disabled={!connected}
+            title="Turn the robot code's intake on/off (what the X button does). The roller only spins while the robot is enabled.">Intake {intakeRunning ? 'on' : 'off'}</button>
           <span className="toolbar-grow" />
           {scrubT != null && <button onClick={() => setScrubT(null)}>● Live</button>}
           <button onClick={clearTraces}>Clear traces</button>
@@ -273,6 +277,7 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
             )}
             {layers.plan && activePts.length > 1 && <Trace points={activePts} className="trace trace-active" />}
 
+            {scrubT == null && <FuelLayer truth={truth} size={size} showFuel={layers.fuel} />}
             {replay ? (
               <>
                 {layers.traces && <Trace points={replayUpTo.map((f) => [f.est[0], f.est[1]])} className="trace trace-estimate" />}
@@ -318,6 +323,7 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
           <Toggle label={<><i className="swatch swatch-cam" />Camera views + sightlines</>} checked={layers.cameras} onChange={(v) => setLayers({ ...layers, cameras: v })} />
           <Toggle label={<><i className="swatch swatch-fused" />Vision measurements used</>} checked={layers.vision} onChange={(v) => setLayers({ ...layers, vision: v })} />
           <Toggle label={<><i className="swatch swatch-shot" />Fuel shots</>} checked={layers.shots} onChange={(v) => setLayers({ ...layers, shots: v })} />
+          <Toggle label={<><i className="swatch swatch-fuel" />FUEL on the field + intake</>} checked={layers.fuel} onChange={(v) => setLayers({ ...layers, fuel: v })} />
           <Toggle label="Traces" checked={layers.traces} onChange={(v) => setLayers({ ...layers, traces: v })} />
           <Toggle label="AprilTag IDs" checked={layers.tags} onChange={(v) => setLayers({ ...layers, tags: v })} />
         </section>

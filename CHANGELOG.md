@@ -2,6 +2,17 @@
 
 Short reference. Full details: [docs/simulator.md](docs/simulator.md). Student guide: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
+## 2026-10-28 — branch `coach`: phase 5a, FUEL on the field + intake pickup
+
+- **Robot code: no changes.** Everything is in `frc.robot.sim` and `sim-ui`.
+- **504 FUEL**, staged per Game Manual 6.3.4: NEUTRAL ZONE box (400 with 8 preloaded), 24 per DEPOT, 24 per OUTPOST CHUTE, robot preload.
+- `FieldFuel.java`: 2D physics on the true pose (rolling, soft bounces, walls, HUB/TOWER/OUTPOST; BUMPs/TRENCHes passable); bumpers push balls; about 1–2.5 ms per loop.
+- **Intake pickup** from the front bumper while the roller (CAN 15) spins, up to capacity 40 and 10 balls/s (placeholders, UI sliders).
+- Shots stay in play: scored FUEL comes back out of a HUB exit after 1 s; misses land on the field. The total stays 504.
+- UI: yellow FUEL layer, intake zone on the robot, **Intake on/off** button (calls the code's `setIntake`), Blue/Red **chute** buttons, new Fuel panel counts.
+- Tests: `FieldFuelTest` (13 JUnit tests, 39 total), `scripts/field-fuel-test.ts`.
+- sim-ui dependencies: a fresh `npm install` failed after the Vite 8 upgrade (`@vitejs/plugin-react` 4.3.4 only supports Vite 4–6). Now plugin-react **6.1.2** and `@types/node` **20.19.43**; clean install, build and `npm audit` (0 vulnerabilities) checked. `vite.config.ts` imports `deployFiles.ts` with its extension (Vite 8 warning).
+
 ## 2026-10-25 — branch `coach` (uncommitted): second code review fixes
 
 - **Real robot (check on blocks):**

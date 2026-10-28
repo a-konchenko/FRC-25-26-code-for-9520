@@ -295,9 +295,9 @@ When you open an auto (a `.auto` file), the right side shows the **auto builder*
 
 - **path**: drive one of your paths.
 - **named**: run a named command.
-- **wait**: do nothing for a number of seconds.
+- **wait**: do nothing for a number of seconds (3 s when you add it; type a new number to change it).
 
-Under each group are buttons to add things to it: **＋ path**, **＋ named**, **＋ wait** and **＋ group**.
+Under each group are buttons to add things to it: **＋ path**, **＋ named**, **＋ wait 3 s** and **＋ group**.
 
 While an auto is open, the field shows all the paths it uses, in order and in different colors, with the starting robot position. The Warnings panel tells you if a path is missing or a named command does not exist.
 
@@ -556,6 +556,19 @@ Each scenario lists what to do, what you should see, and what it teaches. Start 
 **It teaches** how driving, aiming and shooting work together.
 
 You can also try the hand-coded **Shoot All (Stationary)** auto. Place the robot facing roughly toward the HUB from about 3 meters away, choose **Hand-coded**, and press **▶ Play**.
+
+### Scenario 8b — Collect FUEL from the neutral zone
+
+The yellow dots are the **504 FUEL** balls, placed the way the game manual says: a big pile on the center line, 24 in each depot, and 24 waiting in each outpost chute.
+
+1. **Try it by hand first.** Click **Place robot** and put the robot about 1 meter in front of the pile, facing it. Click **Intake on**, then **Test: square**. Watch the yellow box in front of the robot light up: balls that touch it are picked up, and the Fuel panel's **in robot** number goes up. On the sideways and backward legs, the bumpers just push balls aside, because the intake is only at the front.
+2. Click **Intake off** and run the square again. Now the robot plows through the pile and picks nothing up.
+3. **Now in an auto.** Make a path that drives *front first* through the pile and ends 2–4 m from your HUB. Add an event marker near the start of the path that runs **IntakeOn**, and one at the end that runs **IntakeOff**. In the auto, add the path, then **AimAndShoot**.
+4. Press **▶ Run this** and watch the FUEL count: preload + whatever you picked up, then the shots. Scored FUEL comes back out of the HUB into the neutral zone.
+
+**Try:** the **Robot holds** slider (what if the robot only holds 20?), and **Blue chute** to have the human player roll 24 more FUEL onto the field.
+
+**It teaches** that the robot can only pick up with its front, so the path's *heading* matters as much as its shape.
 
 ### Scenario 9 — Playing as the red alliance
 

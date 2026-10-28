@@ -2,7 +2,9 @@ package frc.robot.sim;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +26,10 @@ public class FieldModel {
     public final double width;
     /** Element polygons ({x0,y0,x1,y1,...}) that block camera sightlines — the HUBs. */
     private final List<double[]> solids = new ArrayList<>();
+    /** Bounding box {minX, minY, maxX, maxY} of every element, by id (e.g. "blue-depot"). */
+    private final Map<String, double[]> boxes = new HashMap<>();
+    /** Boxes FUEL bounces off: HUBs, TOWERs and OUTPOSTs. BUMPs and TRENCHes let it roll over/under. */
+    public final List<double[]> fuelSolids = new ArrayList<>();
     private Translation2d hubBlue = new Translation2d(4.6115, 4.0215);
     private Translation2d hubRed  = new Translation2d(11.9065, 4.0215);
 
@@ -37,15 +43,22 @@ public class FieldModel {
             hubBlue = new Translation2d(hc.path("blue").get(0).asDouble(), hc.path("blue").get(1).asDouble());
             hubRed  = new Translation2d(hc.path("red").get(0).asDouble(),  hc.path("red").get(1).asDouble());
             for (JsonNode el : v.path("elements")) {
-                if (!"solid".equals(el.path("type").asText())) continue;
-                // TOWER: open uprights + floor plate — cameras see its wall-mounted tags
-                if (!el.path("blocksVision").asBoolean(true)) continue;
                 JsonNode poly = el.path("poly");
                 double[] flat = new double[poly.size() * 2];
+                double[] box = { Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE };
                 for (int i = 0; i < poly.size(); i++) {
                     flat[2 * i] = poly.get(i).get(0).asDouble();
                     flat[2 * i + 1] = poly.get(i).get(1).asDouble();
+                    box[0] = Math.min(box[0], flat[2 * i]);     box[1] = Math.min(box[1], flat[2 * i + 1]);
+                    box[2] = Math.max(box[2], flat[2 * i]);     box[3] = Math.max(box[3], flat[2 * i + 1]);
                 }
+                String id = el.path("id").asText();
+                String type = el.path("type").asText();
+                boxes.put(id, box);
+                if ("solid".equals(type) || id.endsWith("-outpost")) fuelSolids.add(box);
+                if (!"solid".equals(type)) continue;
+                // TOWER: open uprights + floor plate — cameras see its wall-mounted tags
+                if (!el.path("blocksVision").asBoolean(true)) continue;
                 solids.add(flat);
             }
         } catch (Exception e) {
@@ -54,6 +67,9 @@ public class FieldModel {
     }
 
     public Translation2d hubCenter(boolean red) { return red ? hubRed : hubBlue; }
+
+    /** Bounding box {minX, minY, maxX, maxY} of an element (e.g. "red-depot"), or null if unknown. */
+    public double[] box(String id) { return boxes.get(id); }
 
     /** True if the 2D segment a→b passes through a sightline-blocking element (HUB). */
     public boolean blocked(double ax, double ay, double bx, double by) {

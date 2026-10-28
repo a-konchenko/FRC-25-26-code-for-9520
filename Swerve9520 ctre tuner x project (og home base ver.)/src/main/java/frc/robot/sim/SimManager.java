@@ -53,6 +53,8 @@ public class SimManager {
     private int fusedSeq = 0;
     private double lastUpdateTime = Timer.getFPGATimestamp();
 
+    /** Random seed from the UI (drift + FUEL staging), so two runs can be compared. */
+    private long    seed     = 9520;
     private boolean placed   = false;
     private int     heartbeat = 0;
     private Command testDrive = null;
@@ -66,6 +68,7 @@ public class SimManager {
         this.control    = new SimControl(this, container, nt);
         this.photon     = new PhotonSim(container.vision, field);
         this.fuel       = new FuelSim(mech, container.shooter, field);
+        fuel.reset(seed);
 
         // Every vision measurement the pose estimator receives (main thread, from VisionSubsystem)
         drivetrain.addVisionMeasurementListener((pose, ts, std) -> {
@@ -93,6 +96,7 @@ public class SimManager {
         nt.number("Robot/maxSpeedMps", TunerConstants.kSpeedAt12Volts.in(edu.wpi.first.units.Units.MetersPerSecond));
         nt.array("Robot/ll3Mount", SimRobotConstants.kLL3Mount);
         nt.array("Robot/ll4Mount", SimRobotConstants.kLL4Mount);
+        nt.array("Robot/intake", new double[] { SimRobotConstants.kIntakeDepthM, SimRobotConstants.kIntakeWidthM });
 
         publishTags("andymark", AprilTagFields.k2026RebuiltAndymark);
         publishTags("welded",   AprilTagFields.k2026RebuiltWelded);
@@ -143,6 +147,7 @@ public class SimManager {
         ll3.suppress(s);
         ll4.suppress(s);
         photon.teleported(truth, s);
+        fuel.teleported();
     }
 
     public void cancelTestDrive() {
@@ -191,7 +196,8 @@ public class SimManager {
         fuel.publish(nt);
     }
 
-    public void resetFuel() { fuel.reset(); }
+    /** Reload the robot's preload and restage every FUEL on the field. */
+    public void resetFuel() { fuel.reset(seed); }
 
     private void publishVision(Pose2d truth) {
         for (LimelightSim ll : new LimelightSim[] { ll3, ll4 }) {
@@ -245,7 +251,13 @@ public class SimManager {
         ll4.readSettings(nt);
         photon.readSettings(nt);
         fuel.readSettings(nt);
-        if (nt.action("resetFuel") != null) fuel.reset();
+        if (nt.action("resetFuel") != null) resetFuel();
+        // [red 0/1] — the human player opens that alliance's CHUTE
+        double[] chute = nt.action("releaseChute");
+        if (chute != null) fuel.releaseChute(chute.length > 0 && chute[0] > 0.5);
+        // [on 0/1] — the robot code's own intake on/off (what the X button does), for driving without a controller
+        double[] intake = nt.action("intake");
+        if (intake != null) container.setIntake(intake.length > 0 && intake[0] > 0.5);
         readActions();
     }
 
@@ -256,7 +268,8 @@ public class SimManager {
         drift.slipAccelMultiplier = nt.setting("drift/slipAccelMultiplier", drift.slipAccelMultiplier);
         drift.gyroBiasDegPerMin   = nt.setting("drift/gyroBiasDegPerMin",   drift.gyroBiasDegPerMin);
         drift.gyroScalePct        = nt.setting("drift/gyroScalePct",        drift.gyroScalePct);
-        drift.setSeed((long) nt.setting("seed", 9520));
+        seed = (long) nt.setting("seed", 9520);
+        drift.setSeed(seed);
     }
 
     private void readActions() {

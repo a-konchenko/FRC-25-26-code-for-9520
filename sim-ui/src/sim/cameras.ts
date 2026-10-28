@@ -29,7 +29,11 @@ export const CAM_DEFAULTS: Record<CamKey, CamSettings> = {
   pv: { enabled: false, noise: 1, latencyMs: 30, dropPct: 0, mountErrX: 0, mountErrY: 0, mountErrYawDeg: 0 },
 };
 
-export interface FuelSettings { preload: number; aimTolDeg: number; minDistM: number; maxDistM: number; }
-export const FUEL_DEFAULTS: FuelSettings = { preload: 8, aimTolDeg: 3, minDistM: 1.5, maxDistM: 5.5 };
+export interface FuelSettings {
+  preload: number; aimTolDeg: number; minDistM: number; maxDistM: number;
+  capacity: number;    // FUEL the robot can hold (TO MEASURE)
+  intakeRate: number;  // balls per second the intake can swallow (TO MEASURE)
+}
+export const FUEL_DEFAULTS: FuelSettings = { preload: 8, aimTolDeg: 3, minDistM: 1.5, maxDistM: 5.5, capacity: 40, intakeRate: 10 };
 
 export const SHOT_REASON = ['scored', 'missed — aim off', 'missed — too close', 'missed — too far', 'missed — flywheel too slow'];

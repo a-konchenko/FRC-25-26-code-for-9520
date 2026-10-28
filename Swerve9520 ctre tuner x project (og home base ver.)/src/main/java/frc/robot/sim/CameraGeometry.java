@@ -18,7 +18,7 @@ import edu.wpi.first.math.geometry.Pose3d;
 public final class CameraGeometry {
     private CameraGeometry() {}
 
-    public static final double kMaxViewAngleDeg = 75.0;
+    public static final double kMaxViewAngleDeg = 110.0;
 
     /** Camera pose on the field: {x, y, z, yawRad, pitchRad}. */
     public static double[] cameraOnField(Pose2d robot, double mx, double my, double mz, double yawDeg, double pitchDeg) {

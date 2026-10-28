@@ -360,3 +360,9 @@ table.grid input.num { width: 100%; }
 .gauge-fill.ok { background: var(--ok); }
 .gauge-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
 .gauge-text { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* FUEL on the field (phase 5a) */
+.swatch-fuel { background: #facc15; height: 8px; width: 8px; border-radius: 50%; }
+.field-fuel { fill: #facc15; stroke: #a16207; stroke-width: 0.01; }
+.intake-zone { fill: #facc15; fill-opacity: 0.12; stroke: #ca8a04; stroke-width: 0.015; stroke-dasharray: 0.04 0.03; }
+.intake-zone.on { fill-opacity: 0.45; stroke-dasharray: none; }

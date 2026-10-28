@@ -53,6 +53,25 @@ public final class SimRobotConstants {
     /** Preloaded FUEL (game manual allows up to 8). */
     public static final int    kFuelPreload = 8;
 
+    // ── FUEL on the field and the intake (phase 5a) ─────────────────────────
+    // 2026 Game Manual 5.10.1 / 6.3.4: 504 FUEL per match; 24 in each DEPOT,
+    // 24 in each OUTPOST CHUTE, up to 8 preloaded per robot, the rest (360–408)
+    // in the NEUTRAL ZONE. The sim has one robot, so the 5 missing robots'
+    // preloads (40) go to the NEUTRAL ZONE, as the manual says.
+    public static final int    kFuelTotal = 504;
+    public static final int    kFuelPerDepot = 24;
+    public static final int    kFuelPerChute = 24;
+    /** 5.91 in diameter. */
+    public static final double kFuelRadiusM = Inches.of(5.91).in(Meters) / 2;
+    /** Intake opening across the front bumper. TO MEASURE */
+    public static final double kIntakeWidthM = kFrameWidthM;
+    /** How far in front of the bumper the intake reaches a ball. TO MEASURE */
+    public static final double kIntakeDepthM = 0.10;
+    /** FUEL the robot can hold. TO MEASURE */
+    public static final int    kHopperCapacity = 40;
+    /** Fastest the intake swallows FUEL, balls per second. TO MEASURE */
+    public static final double kIntakeRatePerS = 10.0;
+
     // ── Default start pose for the sim (blue alliance zone, facing red) ────
     public static final double[] kDefaultStartPose = { 3.40, 5.50, 0.0 };
 }

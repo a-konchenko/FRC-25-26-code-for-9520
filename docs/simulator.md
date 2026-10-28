@@ -5,8 +5,9 @@ where the robot *thinks* it is versus where it *really* is.
 
 > **Students:** start with the plain-language [User Guide](USER_GUIDE.md). This page is the technical reference.
 
-> Status: **Phases 1–4 complete**: backbone, Plan tab, Play, cameras (Limelight 3/4,
-> PhotonVision), shooter, mechanisms and fuel. Collisions and polish are phase 5
+> Status: **Phases 1–4 and 5a complete**: backbone, Plan tab, Play, cameras (Limelight 3/4,
+> PhotonVision), shooter, mechanisms and fuel, plus all 504 FUEL on the field with
+> physics and intake pickup. Robot collisions and polish are the rest of phase 5
 > (see [Roadmap](#roadmap)).
 
 ---
@@ -197,10 +198,35 @@ for Plan-tab collision warnings. Tested in `CameraGeometryTest`.
   - A ball **scores** if the true robot points within ±3° of its alliance hub, is 1.5–5.5 m away, and the flywheel is at ≥ 90% of its setpoint.
   - Otherwise it misses, with a reason: aim, too close, too far, or flywheel slow.
   - The shooter is assumed to face the robot's front (`SimRobotConstants.kShooterYawDeg`).
-  - There's no ball flight and no floor pickup.
+  - There's no ball flight.
 - On the field, shots are drawn as **green** lines into the hub (scored) or **red** dashed (missed).
   The Fuel panel shows in robot / scored / missed and the last shot's reason. Fuel reloads on every Play and Reset.
 - `Shoot All (Stationary)` now runs end to end: from 25° off, it aims to within 1°, spins up, and scores 8/8 in about 5 s.
+
+## FUEL on the field and intake pickup (phase 5a)
+
+All **504 FUEL** are in play, staged the way the
+[2026 Game Manual](https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf)
+section 6.3.4 says:
+
+| Where | Count | How |
+|---|---|---|
+| NEUTRAL ZONE | 408 − preload (400 with 8 preloaded) | Hex-packed in the 206 × 72 in box centered on the CENTER LINE, with the 2 in divider gap; random spots, so not a perfect grid. The manual's 360 plus the 40 the five missing robots would have preloaded (GM: FUEL not preloaded goes to the NEUTRAL ZONE). |
+| Each DEPOT | 24 | Loose, inside the depot (its position along the wall is still approximate). |
+| Each OUTPOST CHUTE | 24 | Held by the human player until **Blue chute / Red chute** is pressed, then rolls out of the OUTPOST opening, one ball every 0.15 s. |
+| Our robot | preload (≤ 8) | The Fuel panel's preload slider. |
+
+`FieldFuel.java` runs top-down 2D physics on the **true** robot pose, inside the robot loop (about 1–2.5 ms per 20 ms loop with 450+ balls, measured):
+
+- Each ball is a 5.91 in disc that rolls, slows down on the carpet (1.2 m/s², so a ball pushed at 2 m/s rolls about 1.7 m), and bounces softly (restitution 0.3) off other balls, the guardrails, the HUBs, TOWERs and OUTPOSTs. BUMPs and TRENCHes don't stop FUEL.
+- The bumpers push balls aside. The robot itself is **not** slowed by them (robot collisions are still planned).
+- **Intake:** a ball touching the zone across the front bumper (frame width × 10 cm, drawn on the robot, bright while running) is picked up while the intake roller (CAN 15) spins, up to the robot's capacity (40) and intake rate (10 balls/s). Otherwise the bumper pushes it. All three are placeholders (TO MEASURE).
+- **Shots stay in play:** a scored ball spends 1 s in the HUB, then comes out of one of its 4 exits into the NEUTRAL ZONE (GM 5.4; exit positions approximate). A missed ball lands at the end of its red miss line.
+- **Intake on/off** in the Run tab calls the robot code's own `setIntake()` (what the X button does), so you can test pickup with *Test: square* and no controller. The roller only spins while the robot is enabled.
+- The Fuel panel shows in robot / capacity, on field, picked up, in hub, and the total (always 504).
+- Play, Reset and *Reset all FUEL* restage everything, using the drift **seed**, so two runs start from the same field.
+
+Not modeled: FUEL pushed into the CORRAL, balls stacking or riding up the BUMPs, ball spin.
 
 ---
 
@@ -286,6 +312,9 @@ run on the real robot.
 | ★ Fuel (game piece) sim | ❌ | `sim/FuelSim.java` | 4 | ✅ done |
 | ★ Intake / arm / climber sims | ❌ | `sim/MechanismSims.java` | 4 | ✅ done |
 | ★ Mechanism + fuel UI | ❌ | `sim-ui/src/tabs/RunTab/MechPanel.tsx` | 4 | ✅ done |
+| ★ FUEL on the field (504, physics, hub return, chutes) | ❌ | `sim/FieldFuel.java` | 5a | ✅ done |
+| ★ Intake pickup from the front bumper | ❌ (code runs the roller) | `sim/FuelSim.java`, `FieldFuel.java` | 5a | ✅ done |
+| ★ FUEL + intake UI | ❌ | `sim-ui/src/tabs/RunTab/FuelLayer.tsx`, `MechPanel.tsx` | 5a | ✅ done |
 | ★ Field collisions + bump impulses | ❌ | `sim/Collisions.java` | 5 | planned |
 | ★ Recorder, replay, run compare, export | ❌ | `sim/Recorder.java`, UI | 5 | planned |
 
@@ -387,6 +416,10 @@ All in [`SimRobotConstants.java`](../Swerve9520%20ctre%20tuner%20x%20project%20(
 | Shooter direction | robot front (`kShooterYawDeg` = 0) | |
 | Arm / climber gearing and travel | 60:1, 0.3 rot; 25:1, 8 rot | `MechanismSims.java` |
 | PhotonVision camera properties | 1280×800, 100° diag, 30 fps, 30 ms | `PhotonSim.java` |
+| Intake zone | frame width × 10 cm in front of the bumper | `kIntakeWidthM`, `kIntakeDepthM` |
+| Hopper capacity / intake rate | 40 FUEL, 10 FUEL/s | `kHopperCapacity`, `kIntakeRatePerS` (also UI sliders) |
+| FUEL rolling resistance / bounce | 1.2 m/s², restitution 0.3 | `FieldFuel.java` |
+| HUB exit positions | 4 exits, 0.3 m apart on the neutral-zone face | `FieldFuel.java` (GM figure 5-8 is an approximation) |
 
 ---
 
@@ -417,6 +450,9 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `/Sim/Mech/state` | double[8] | {flywheel rps, setpoint, feeder rps, intake rps, arm 0–1, climber L 0–1, climber R 0–1, atSpeed} |
 | `/Sim/Fuel/state` | double[4] | {in robot, scored, missed, preload} |
 | `/Sim/Fuel/shots` | double[] | {seq, fromX, fromY, toX, toY, result} × last 24; result 0 = scored, 1 aim, 2 close, 3 far, 4 slow |
+| `/Sim/Fuel/field` | double[] | {x, y} of every FUEL on the floor (25 Hz) |
+| `/Sim/Fuel/physicsMs` | double | Time the FUEL physics took this loop |
+| `/Sim/Robot/intake` | double[2] | {depth in front of the bumper, width} m |
 | `/Sim/Modules` | double[8] | {steer rad, speed m/s} × 4 |
 | `/Sim/Speeds` | double[3] | Chassis vx, vy, ω (robot frame) |
 | `/Sim/Drift/state` | double[4] | {distance m, gyro error °, localization error m, heading error °} |
@@ -446,8 +482,10 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `reset` | double[] `[seq, kind, red, errX, errY, errθ]` | Stop and place on the start pose |
 | `/Sim/Plan/previewRequest` | string | `{"id": n, "path": {….path JSON…}}` |
 | `cam/<ll3\|ll4\|pv>/<setting>` | double | enabled (0/1), noise, latencyMs, dropPct, hFovDeg, maxRangeM, mountErrX, mountErrY, mountErrYawDeg |
-| `fuel/<setting>` | double | preload, aimTolDeg, minDistM, maxDistM |
-| `resetFuel` | double[] `[seq]` | Reload fuel |
+| `fuel/<setting>` | double | preload, aimTolDeg, minDistM, maxDistM, capacity, intakeRate |
+| `resetFuel` | double[] `[seq]` | Preload the robot and restage all 504 FUEL |
+| `releaseChute` | double[] `[seq, red]` | That alliance's human player opens the CHUTE |
+| `intake` | double[] `[seq, on]` | Robot code intake on/off (`RobotContainer.setIntake`, like the X button) |
 
 One-shot actions carry a sequence number. The robot acts once each time it changes,
 and the UI never re-sends an action after a reconnect.
@@ -463,6 +501,7 @@ Run each with the robot sim running:
 - `node scripts/preview-test.ts`: requests the exact preview of `Test path`.
 - `node scripts/vision-test.ts`: kidnap with cameras on/off, LL4 aim, `Shoot All (Stationary)` scoring.
 - `node scripts/pv-test.ts`: enables the PhotonVision cameras and checks that they correct a kidnap.
+- `node scripts/field-fuel-test.ts`: FUEL staging (504), bumper push, intake pickup and capacity, chute release, scored FUEL coming back out of the hub, physics time.
 - `npm run gen-field`: regenerates `field-2026.json` (UI and Java copies).
 
 ---
@@ -475,4 +514,5 @@ Run each with the robot sim running:
 | 2 Autonomy + Plan tab | AutoBuilder + named commands, PathPlanner-style editor, Play (20 s auto), plan/setpoint layers, error charts, timeline | ✅ |
 | 3 Cameras | LL3 MegaTag2, LL4, PhotonVision sims, camera cones, correction dots, kidnap demo | ✅ |
 | 4 Mechanisms | Shooter, feeder, fuel scoring, intake, climber; ShootAllAuto playable | ✅ |
-| 5 Polish | Collisions, bump impulses, run compare, narration, reports, exports, student exercises | next |
+| 5a Field FUEL | 504 FUEL with physics, intake pickup, hub return, human-player chutes | ✅ |
+| 5 Polish | Robot collisions, bump impulses, run compare, narration, reports, exports, student exercises | next |
