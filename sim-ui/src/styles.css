@@ -224,7 +224,8 @@ button.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad)
 .small-btn { padding: 1px 7px; font-size: 12px; }
 .row-buttons { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.panel-head h3 { margin: 0; }
+.panel-head h3 { margin: 0; margin-right: auto; }
+.panel-head { gap: 4px; }
 .seg { display: inline-flex; }
 .seg button { border-radius: 0; margin-left: -1px; }
 .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
@@ -296,6 +297,21 @@ button.file.active { background: var(--accent-soft); color: var(--accent); }
 .plan-rot-dot.active { fill: var(--accent); opacity: 1; }
 .plan-marker polygon { fill: #f59e0b; stroke: #92400e; stroke-width: 0.015; cursor: move; }
 .plan-marker.active polygon { fill: var(--accent); }
+.plan-stop rect { fill: #ef4444; stroke: #7f1d1d; stroke-width: 0.015; cursor: move; }
+.plan-stop line { stroke: #fff; stroke-width: 0.03; pointer-events: none; }
+.plan-stop.active rect { fill: var(--accent); }
+.auto-stop rect { fill: #ef4444; stroke: #7f1d1d; stroke-width: 0.015; }
+.auto-stop line { stroke: #fff; stroke-width: 0.03; }
+.stop-item { border-left: 3px solid #ef4444; }
+.speed-item.up { border-left: 3px solid #22c55e; }
+.speed-item.down { border-left: 3px solid #3b82f6; }
+.plan-speed polygon { stroke: #0f172a; stroke-width: 0.015; cursor: move; }
+.plan-speed.up polygon { fill: #22c55e; }
+.plan-speed.down polygon { fill: #3b82f6; }
+.plan-speed.active polygon { fill: var(--accent); }
+.plan-speed-zone { fill: none; stroke-width: 0.09; stroke-linecap: round; opacity: 0.35; pointer-events: none; }
+.plan-speed.up .plan-speed-zone { stroke: #22c55e; }
+.plan-speed.down .plan-speed-zone { stroke: #3b82f6; }
 .plan-marker-label { font-size: 0.11px; fill: var(--text); font-weight: 600; pointer-events: none; }
 .plan-collision { fill: var(--bad); opacity: 0.75; }
 

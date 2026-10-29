@@ -4,5 +4,6 @@ export type Selection =
   | { type: 'rot'; i: number }
   | { type: 'rotHandle'; i: number }
   | { type: 'marker'; i: number }
+  | { type: 'speed'; i: number }   // index into constraintZones
   | { type: 'start' | 'end' }
   | null;

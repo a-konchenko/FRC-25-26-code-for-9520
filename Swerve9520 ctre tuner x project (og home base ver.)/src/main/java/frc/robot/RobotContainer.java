@@ -37,6 +37,7 @@ import frc.robot.subsystems.Shooter;
 import frc.robot.subsystems.VisionSubsystem;
 import frc.robot.subsystems.VisionSubsystem.TargetMode;
 import frc.robot.commands.AutoAimCommand;
+import frc.robot.commands.ShootCommands;
 import frc.robot.commands.auto.ShootAllAuto;
 
 public class RobotContainer {
@@ -194,16 +195,10 @@ public class RobotContainer {
         m_namedCommandNames.add(name);
     }
 
-    /**
-     * Spin up (max 1.5 s, until at speed), then feed for feedSeconds, then stop.
-     * If the flywheel never reaches speed it feeds anyway after 1.5 s, so the
-     * robot still empties in auto.
-     */
+    /** Spin up, feed for feedSeconds, stop (see ShootCommands.shootFor for the timing). */
     private Command shootFor(double feedSeconds) {
-        return Commands.sequence(
-            Commands.run(shooter::spinUp, shooter).until(shooter::isAtSpeed).withTimeout(1.5),
-            Commands.run(shooter::feed, shooter).withTimeout(feedSeconds)
-        ).finallyDo(shooter::stop);
+        return ShootCommands.shootFor(shooter, shooter::spinUp, shooter::isAtSpeed,
+            shooter::feed, shooter::stop, feedSeconds);
     }
 
     private Command armFor(double output, double seconds) {
@@ -405,6 +400,9 @@ public class RobotContainer {
 
     /** Simulator only: run this command in the next autonomous instead of the chooser selection. */
     public void setAutonomousOverride(Command command) { m_autoOverride = command; }
+
+    /** Simulator only: whether an override is queued (the sim checks it never goes stale). */
+    public boolean hasAutonomousOverride() { return m_autoOverride != null; }
 
     public Map<String, Supplier<Command>> getHandCodedAutos() { return Collections.unmodifiableMap(m_handCodedAutos); }
 

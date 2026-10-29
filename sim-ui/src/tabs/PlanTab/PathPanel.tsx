@@ -1,7 +1,9 @@
 // Properties of the open path (right sidebar).
 import type { Collision } from '../../pathplanner/collision';
-import { deleteWaypoint, insertWaypoint, moveAnchor, normDeg } from '../../pathplanner/edit';
-import type { PPConstraints, PPEventMarker, PPPath } from '../../pathplanner/types';
+import {
+  STOP_MARGIN, deleteWaypoint, insertWaypoint, isSpeedZone, isStopMarker, maxSpeedAt, moveAnchor, newSpeedZone, newStopMarker, normDeg,
+} from '../../pathplanner/edit';
+import type { PPConstraintZone, PPConstraints, PPEventMarker, PPPath } from '../../pathplanner/types';
 import type { Selection } from './selection';
 
 interface Props {
@@ -14,6 +16,12 @@ interface Props {
   connected: boolean;
   robotLength: number;
 }
+
+/** Robot top speed (m/s); a speed marker above this can't be reached. */
+const ROBOT_MAX_SPEED = 4.44;
+
+/** Length of a new Stop & wait (seconds); edit it on the marker afterwards. */
+const DEFAULT_STOP_S = 3.0;
 
 export function PathPanel({ path, sel, setSel, update, collisions, namedOptions, connected }: Props) {
   const n = path.waypoints.length - 1;
@@ -115,7 +123,54 @@ export function PathPanel({ path, sel, setSel, update, collisions, namedOptions,
 
       <section className="panel">
         <div className="panel-head">
+          <h3>Speed markers</h3>
+          <button onClick={() => {
+            const pos = selWp >= 0 && selWp < n ? selWp : Math.round(n * 50) / 100;
+            const v = Math.round(maxSpeedAt(path, pos) * 50) / 100; // half the speed there: slow down
+            update({ ...path, constraintZones: [...(path.constraintZones ?? []), newSpeedZone(path, pos, v)] });
+            setSel({ type: 'speed', i: (path.constraintZones ?? []).length });
+          }} title="Change the max speed from this point on">＋ Speed</button>
+        </div>
+        {!(path.constraintZones ?? []).some(isSpeedZone) && <p className="muted tiny">Slow down (▼) or speed up (▲) from a point on, until the next speed marker or the end of the path. Saved as PathPlanner constraint zones.</p>}
+        {(path.constraintZones ?? []).map((z, k) => {
+          if (!isSpeedZone(z)) return null;
+          const before = z.minWaypointRelativePos <= 1e-9 ? c.maxVelocity : maxSpeedAt(path, z.minWaypointRelativePos - 1e-3);
+          const up = z.constraints.maxVelocity > before + 1e-9;
+          const setZone = (patch: Partial<PPConstraintZone>, history = true) => update({
+            ...path, constraintZones: (path.constraintZones ?? []).map((x, j) => (j === k ? { ...(x as PPConstraintZone), ...patch } : x)),
+          }, history);
+          const setZC = (key: keyof PPConstraints, v: number) => setZone({ constraints: { ...z.constraints, [key]: v } });
+          return (
+            <div key={k} className={`item speed-item ${up ? 'up' : 'down'} ${sel?.type === 'speed' && sel.i === k ? 'selected' : ''}`} onClick={() => setSel({ type: 'speed', i: k })}>
+              <div className="item-row">
+                <strong className="grow small">{up ? '▲ Speed up' : '▼ Slow down'}</strong>
+                <button className="danger small-btn" onClick={(e) => { e.stopPropagation(); update({ ...path, constraintZones: (path.constraintZones ?? []).filter((_, j) => j !== k) }); setSel(null); }}>✕</button>
+              </div>
+              <div className="form-grid">
+                <label>Max velocity (m/s)</label><Num value={z.constraints.maxVelocity} step={0.1} min={0.1} onChange={(v) => setZC('maxVelocity', Math.max(0.1, v))} />
+                <label>Max accel (m/s²)</label><Num value={z.constraints.maxAcceleration} step={0.1} min={0.1} onChange={(v) => setZC('maxAcceleration', Math.max(0.1, v))} />
+              </div>
+              <label className="slider">
+                <span className="slider-label">from waypoint</span>
+                <input type="range" min={0} max={n - 0.01} step={0.01} value={z.minWaypointRelativePos}
+                  onChange={(e) => setZone({ minWaypointRelativePos: Number(e.target.value) }, false)} />
+                <span className="slider-value">{z.minWaypointRelativePos.toFixed(2)}</span>
+              </label>
+              <p className="muted tiny">Until waypoint {z.maxWaypointRelativePos.toFixed(2)}{z.maxWaypointRelativePos >= n - 1e-9 ? ' (end of path)' : ' (next speed marker)'}; before it: {before.toFixed(2)} m/s.</p>
+              {z.constraints.maxVelocity > ROBOT_MAX_SPEED && <p className="warn tiny">⚠ The robot tops out at {ROBOT_MAX_SPEED} m/s.</p>}
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
           <h3>Event markers</h3>
+          <button onClick={() => {
+            const pos = Math.min(Math.max(selWp >= 0 ? selWp : n / 2, STOP_MARGIN), n - STOP_MARGIN);
+            update({ ...path, eventMarkers: [...path.eventMarkers, newStopMarker(pos, DEFAULT_STOP_S)] });
+            setSel({ type: 'marker', i: path.eventMarkers.length });
+          }} title="The robot stops here, waits, then drives on">＋ Stop &amp; wait</button>
           <button onClick={() => {
             const pos = selWp >= 0 ? selWp : n / 2;
             const m: PPEventMarker = { name: 'Marker', waypointRelativePos: pos, endWaypointRelativePos: null, command: allNames[0] ? { type: 'named', data: { name: allNames[0] } } : null };
@@ -124,7 +179,24 @@ export function PathPanel({ path, sel, setSel, update, collisions, namedOptions,
           }}>＋ Add</button>
         </div>
         {path.eventMarkers.length === 0 && <p className="muted tiny">Run a named command while driving (e.g. SpinUp, IntakeOn). Drivetrain commands like AutoAim can't run here — put them as auto steps.</p>}
-        {path.eventMarkers.map((m, k) => (
+        {path.eventMarkers.some(isStopMarker) && <p className="muted tiny">⏸ PathPlanner can't pause inside a path, so <b>Save</b> splits the path at each Stop &amp; wait (into “… 2”, “… 3”) and puts a wait step between the parts in the autos that use it.</p>}
+        {path.eventMarkers.map((m, k) => isStopMarker(m) ? (
+          <div key={k} className={`item stop-item ${sel?.type === 'marker' && sel.i === k ? 'selected' : ''}`} onClick={() => setSel({ type: 'marker', i: k })}>
+            <div className="item-row">
+              <strong className="grow small">⏸ Stop &amp; wait</strong>
+              <Num value={m.command?.data.waitTime ?? 0} step={0.5} min={0}
+                onChange={(v) => update({ ...path, eventMarkers: path.eventMarkers.map((x, j) => (j === k ? { ...x, command: { type: 'wait', data: { ...x.command?.data, waitTime: Math.max(0, v) } } } : x)) })} />
+              <span className="small">s</span>
+              <button className="danger small-btn" onClick={(e) => { e.stopPropagation(); update({ ...path, eventMarkers: path.eventMarkers.filter((_, j) => j !== k) }); setSel(null); }}>✕</button>
+            </div>
+            <label className="slider">
+              <span className="slider-label">at waypoint</span>
+              <input type="range" min={STOP_MARGIN} max={n - STOP_MARGIN} step={0.01} value={m.waypointRelativePos}
+                onChange={(e) => update({ ...path, eventMarkers: path.eventMarkers.map((x, j) => (j === k ? { ...x, waypointRelativePos: Number(e.target.value) } : x)) }, false)} />
+              <span className="slider-value">{m.waypointRelativePos.toFixed(2)}</span>
+            </label>
+          </div>
+        ) : (
           <div key={k} className={`item ${sel?.type === 'marker' && sel.i === k ? 'selected' : ''}`} onClick={() => setSel({ type: 'marker', i: k })}>
             <div className="item-row">
               <input className="grow" value={m.name} onChange={(e) => update({ ...path, eventMarkers: path.eventMarkers.map((x, j) => (j === k ? { ...x, name: e.target.value } : x)) }, false)} />

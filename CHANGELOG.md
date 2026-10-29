@@ -2,6 +2,27 @@
 
 Short reference. Full details: [docs/simulator.md](docs/simulator.md). Student guide: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
+## 2026-10-29 — branch `coach`: speed markers (Plan tab)
+
+- **Robot code: no changes.** UI only.
+- **＋ Speed** in a path: a ▼/▲ marker that sets max velocity and acceleration from that point until the next speed marker or the path end. Saved as standard PathPlanner constraint zones (`Speed marker (N m/s)`), so the robot and the PathPlanner app use them unchanged; zones made in the app are kept.
+- Checked with the exact PathPlannerLib preview (sim running): a 1.2 m/s marker caps the whole path at 1.20 m/s; a 1.0 m/s marker at waypoint 1 leaves 3.0 m/s before and 1.00 after; a later 2.5 m/s marker takes over; a 4.0 m/s marker goes above the 3 m/s path limit.
+
+## 2026-10-29 — branch `coach`: Stop & wait marker (Plan tab)
+
+- **Robot code: no changes.** UI only (`sim-ui/src/pathplanner/edit.ts`, `types.ts`, `tabs/PlanTab/`).
+- **＋ Stop & wait** in a path's Event markers: a ⏸ marker with a variable wait (default 3 s), dragged along the path like an event marker.
+- PathPlannerLib can't pause inside a path, so **Save splits the path** there (exact curve cut, parts end/start at rest, joined by a linked waypoint) and the autos that use it get `path → wait → path 2`; with no auto, one is created. Saving a path also moves its linked waypoints in other paths (like the PathPlanner app).
+- Checked: scratch test of the split (parts trace the original within 1e-14 m; targets, markers, zones, links, auto rewrite), and a live run of a split `Test path` through the robot code: part 1 ends at ~1.8 s, the robot holds still 3 s, part 2 starts at ~5 s.
+
+## 2026-10-28 — branch `coach`: review fixes (UNIT_TEST_RECOMMENDATIONS)
+
+- **Real robot: no behavior change.** `shootFor` moved to `commands/ShootCommands.java` and pinned by `ShootCommandsTest` (feeds after 1.5 s even if the flywheel never reaches speed — kept, team decision). `RobotContainer.hasAutonomousOverride()` added (sim only).
+- **Sim:** Play while an auto is running now really restarts (#2): new `disarming` state waits one robot loop disabled. A failed build, Stop or a stuck enable never leaves an auto queued (#7, `/Sim/Run/overrideActive`).
+- **UI:** clicks made while disconnected are no longer replayed (#5); Rename/Duplicate/New refuse existing names ignoring case, case-only rename is safe on macOS, renaming a path offers to update its autos, Delete warns which autos use a path (#6); waypoint insert/delete shifts constraint and point-towards zones (#8); Save asks before overwriting a file the PathPlanner app changed (#9); unique temp files, leftovers removed at startup (#10); a click without a drag keeps redo (#11).
+- **Tests:** 42 JUnit tests. New `scripts/run-control-test.ts` (#1 deadlock stress, #2, #7).
+- Still open: #3 feeder stutter while holding Y (real robot), #4 stick mapping (check on blocks).
+
 ## 2026-10-28 — branch `coach`: phase 5a, FUEL on the field + intake pickup
 
 - **Robot code: no changes.** Everything is in `frc.robot.sim` and `sim-ui`.

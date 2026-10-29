@@ -229,6 +229,8 @@ The Plan tab is a path editor, similar to the official PathPlanner app. It edits
 - **Start and end robots** are the purple robot outlines at the start and end. The small circle in front of each one is a **heading handle**: drag it around to choose which way the robot faces at the start or the end. It snaps to 5-degree steps. Hold **Shift** for any angle.
 - **Rotation targets** are dashed robot outlines along the path. Drag the dot in the middle to slide one along the path, or drag the circle in front of it to change which way the robot faces there.
 - **Event markers** are orange diamonds ◆ with a label. Drag them along the path to choose where a named command starts.
+- **Speed markers** are triangles with a speed under them: a blue ▼ slows the robot down, a green ▲ speeds it up. The part of the path they cover is shaded in the same color. Drag one along the path to choose where the new speed starts.
+- **Stop & wait markers** are red squares ⏸ with the number of seconds under them. Drag them along the path to choose where the robot stops.
 - **Red dots** appear where the robot's bumpers would hit the HUB, a TOWER or a wall. The Warnings panel on the right says which part and near which waypoint. Driving over a BUMP or under a TRENCH is allowed, so those do not make red dots.
 
 ### 6.4 The side panels (right side, when a path is open)
@@ -252,6 +254,17 @@ The Plan tab is a path editor, similar to the official PathPlanner app. It edits
   - an "at waypoint" slider,
   - a **runs** menu where you pick the named command,
   - **✕** to remove it.
+- **Speed markers** has **＋ Speed**, which adds one at half the speed the robot has there. Each one has:
+  - **Max velocity** (meters per second) and **Max accel**: the new limits,
+  - a "from waypoint" slider: where the new speed starts,
+  - **✕** to remove it.
+  - The new speed lasts until the next speed marker, or to the end of the path. So to slow down for a short part, add a ▼ where it starts and a ▲ back to the normal speed where it ends.
+  - A speed marker can also be faster than the path's own **Max velocity**, but the robot can't go faster than about 4.44 m/s.
+  - PathPlanner calls these *constraint zones*. The PathPlanner app shows them as zones named "Speed marker".
+- **＋ Stop & wait** (next to **＋ Add**) adds a marker where the robot **stops, waits, and then drives on**. It has a seconds box (3 s when you add it), an "at waypoint" slider and **✕**.
+  - PathPlanner can't pause in the middle of a path, so when you press **Save** the editor asks to **split the path** at the marker. For a path called `Grab`: `Grab` becomes the part before the stop, a new path `Grab 2` is the part after, and every auto that uses `Grab` gets the steps *Grab → wait 3 s → Grab 2*. If no auto uses the path yet, a new auto is made for you, because a single path can't stop.
+  - After the split, change the time in the auto's **wait** step. To move the stop, drag the last waypoint of `Grab` (or the first one of `Grab 2`): the two are *linked*, so saving one moves the other too.
+  - **▶ Run this** on a path you just split runs that auto.
 
 **What does "at waypoint 1.5" mean?** Positions along a path are measured in waypoints: 0 is the first waypoint, 1 is the second, and 1.5 is halfway between the second and third. This is how PathPlanner stores positions.
 

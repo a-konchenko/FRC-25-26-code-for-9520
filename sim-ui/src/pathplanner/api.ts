@@ -16,10 +16,12 @@ async function readJson<T>(rel: string): Promise<T> {
   return r.json();
 }
 
-async function writeJson(rel: string, data: unknown): Promise<void> {
+/** Write a file; returns its new modification time (ms), for the "changed on disk" check. */
+async function writeJson(rel: string, data: unknown): Promise<number> {
   // 2-space indent, like the PathPlanner app
   const r = await fetch(`/api/pp/file?path=${encodeURIComponent(rel)}`, { method: 'PUT', body: JSON.stringify(data, null, 2) });
   if (!r.ok) throw new Error(`save ${rel}: ${(await r.json().catch(() => ({}))).error ?? r.status}`);
+  return (await r.json()).mtime;
 }
 
 async function remove(rel: string): Promise<void> {
@@ -35,6 +37,18 @@ export const writeAuto = (name: string, a: PPAuto) => writeJson(`autos/${name}.a
 export const writeSettings = (s: PPSettings) => writeJson('settings.json', s);
 export const deletePath = (name: string) => remove(`paths/${name}.path`);
 export const deleteAuto = (name: string) => remove(`autos/${name}.auto`);
+
+/** Modification time of a file as the server sees it now (null = doesn't exist). */
+export async function fileMtime(kind: 'path' | 'auto' | 'settings', name = ''): Promise<number | null> {
+  const l = await listFiles();
+  if (kind === 'settings') return l.settings;
+  return (kind === 'path' ? l.paths : l.autos).find((f) => f.name === name)?.mtime ?? null;
+}
+
+/** True if a file with this name exists, ignoring upper/lower case (macOS and Windows treat them as one file). */
+export function nameTaken(list: FileEntry[], name: string): boolean {
+  return list.some((f) => f.name.toLowerCase() === name.toLowerCase());
+}
 
 /** File names can't contain path separators or characters most file systems reject. */
 export function validName(name: string): boolean {

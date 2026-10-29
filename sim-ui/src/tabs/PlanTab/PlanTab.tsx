@@ -6,15 +6,21 @@ import { RobotShape, Trace } from '../../field/RobotShape';
 import { FIELD, type Variant } from '../../field/fieldData';
 import { nt, useConnected, useNT } from '../../nt/store';
 import {
-  deleteAuto, deletePath, listFiles, readAuto, readPath, readSettings, validName,
+  deleteAuto, deletePath, fileMtime, listFiles, nameTaken, readAuto, readPath, readSettings, validName,
   writeAuto, writePath, writeSettings, type FileList,
 } from '../../pathplanner/api';
 import { findCollisions } from '../../pathplanner/collision';
-import { appendWaypoint, moveAnchor, moveControl, normDeg } from '../../pathplanner/edit';
+import {
+  STOP_MARGIN, appendWaypoint, applyLinked, isSpeedZone, isStopMarker, linkedAnchors, moveAnchor, moveControl, normDeg,
+  normalizeSpeedZones, splitAtStops,
+} from '../../pathplanner/edit';
 import { nearestPos, pointAt, samplePath, pathLength } from '../../pathplanner/geometry';
-import { autoPathNames, newAuto, newPath, type PPAuto, type PPPath, type PPSettings } from '../../pathplanner/types';
+import {
+  autoPathNames, expandPathIn, newAuto, newPath, renamePathIn, waitsAfterPaths,
+  type PPAuto, type PPCommand, type PPPath, type PPSettings,
+} from '../../pathplanner/types';
 import type { RunKind } from '../../pathplanner/plan';
-import { HANDLE_R, PathLayer, rotationHandle } from './PathLayer';
+import { HANDLE_R, PathLayer, StopGlyph, rotationHandle } from './PathLayer';
 import { PathPanel } from './PathPanel';
 import { AutoPanel } from './AutoPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -51,6 +57,7 @@ export function PlanTab({ variant, onRun }: Props) {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [autoPaths, setAutoPaths] = useState<{ name: string; path: PPPath }[]>([]);
   const dragging = useRef<Selection>(null);
+  const dragMoved = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -68,6 +75,8 @@ export function PlanTab({ variant, onRun }: Props) {
   }, [refresh]);
 
   const dirty = doc ? JSON.stringify(doc.data) !== savedJson : false;
+  // Stop & wait markers not split yet (Save splits them)
+  const hasStops = doc?.kind === 'path' && doc.data.eventMarkers.some(isStopMarker);
   const size = useMemo(() => {
     if (settings) return [settings.robotLength, settings.robotWidth, ntSize[2] ?? settings.robotLength - 0.165, ntSize[3] ?? settings.robotWidth - 0.165];
     return ntSize.length >= 4 ? ntSize : [0.851, 0.775, 0.686, 0.61];
@@ -75,10 +84,14 @@ export function PlanTab({ variant, onRun }: Props) {
 
   // ── open / new / save ─────────────────────────────────────────────────────
   const confirmDiscard = () => !dirty || window.confirm('Discard unsaved changes?');
+  // Modification time of the open file when we last read or wrote it, so a
+  // save can tell if something else (the PathPlanner app) changed it since.
+  const openedMtime = useRef<number | null>(null);
 
   const open = async (kind: 'path' | 'auto' | 'settings', name = '') => {
     if (!confirmDiscard()) return;
     try {
+      openedMtime.current = await fileMtime(kind, name);
       const d: Doc = kind === 'path' ? { kind, name, data: await readPath(name) }
         : kind === 'auto' ? { kind, name, data: await readAuto(name) }
         : { kind, data: await readSettings() };
@@ -93,17 +106,106 @@ export function PlanTab({ variant, onRun }: Props) {
   const save = async (): Promise<boolean> => {
     if (!doc) return false;
     try {
-      if (doc.kind === 'path') await writePath(doc.name, doc.data);
-      else if (doc.kind === 'auto') await writeAuto(doc.name, doc.data);
-      else { await writeSettings(doc.data); setSettings(doc.data); }
+      const name = doc.kind === 'settings' ? '' : doc.name;
+      const now = await fileMtime(doc.kind, name);
+      if (openedMtime.current != null && now != null && now !== openedMtime.current &&
+          !window.confirm(`"${name || 'settings.json'}" was changed by another program (the PathPlanner app?) since you opened it.\n\nOverwrite those changes with yours?`)) {
+        setStatus('Not saved. Reopen the file to see the other changes (yours will be lost), or save again to overwrite.');
+        openedMtime.current = now; // asked once; a second Save overwrites
+        return false;
+      }
+      if (doc.kind === 'path' && hasStops) {
+        const split = await saveWithStops(doc.name, doc.data);
+        if (split !== null) { refresh(); return split; }
+      }
+      let also = '';
+      if (doc.kind === 'path') {
+        openedMtime.current = await writePath(doc.name, doc.data);
+        const moved = await syncLinked(doc.name, doc.data);
+        if (moved.length) also = ` Moved the linked waypoint in ${moved.join(', ')} too.`;
+      } else if (doc.kind === 'auto') openedMtime.current = await writeAuto(doc.name, doc.data);
+      else { openedMtime.current = await writeSettings(doc.data); setSettings(doc.data); }
       setSavedJson(JSON.stringify(doc.data));
-      setStatus(`Saved ${new Date().toLocaleTimeString()}`);
+      setStatus(`Saved ${new Date().toLocaleTimeString()}.${also}${hasStops ? ' Not split: the robot won’t stop at ⏸ until you Save again and let it split.' : ''}`);
       refresh();
       return true;
     } catch (e) {
       setStatus(String(e));
       return false;
     }
+  };
+
+  /**
+   * Linked waypoints (same linkedName, e.g. where a Stop & wait split a path)
+   * stay joined: move them in every other path too, like the PathPlanner app.
+   */
+  const syncLinked = async (name: string, data: PPPath): Promise<string[]> => {
+    const anchors = linkedAnchors(data);
+    if (!anchors.size) return [];
+    const moved: string[] = [];
+    for (const f of (await listFiles()).paths) {
+      if (f.name === name) continue;
+      try {
+        const next = applyLinked(await readPath(f.name), anchors);
+        if (next) { await writePath(f.name, next); moved.push(f.name); }
+      } catch { /* unreadable: skip */ }
+    }
+    return moved;
+  };
+
+  /** The auto to play after Save split a path (Run this on a split path runs that auto). */
+  const splitAuto = useRef<string | null>(null);
+
+  /**
+   * Save a path that has Stop & wait markers: split it there (first part keeps
+   * the name, the others become "name 2", "name 3"…) and make the autos that use
+   * it drive the parts with wait steps between. No auto uses it → create one.
+   * Returns null if the user chose to save without splitting.
+   */
+  const saveWithStops = async (name: string, data: PPPath): Promise<boolean | null> => {
+    const fresh = await listFiles();
+    // "base 2", "base 3"… not used by a file or already picked (case-insensitive, like the file system)
+    const nextFree = (list: { name: string }[], base: string, picked: string[]) => {
+      const taken = new Set([...list.map((f) => f.name), ...picked].map((x) => x.toLowerCase()));
+      for (let j = 2; ; j++) if (!taken.has(`${base} ${j}`.toLowerCase())) return `${base} ${j}`;
+    };
+    const count = data.eventMarkers.filter(isStopMarker).length;
+    const names = [name];
+    for (let k = 0; k < count; k++) names.push(nextFree(fresh.paths, name, names));
+    const { parts, waits } = splitAtStops(data, (k) => `${names[k]} → ${names[k + 1]}`);
+    names.length = parts.length;
+    const steps: PPCommand[] = parts.flatMap((_, k) => [
+      { type: 'path', data: { pathName: names[k] } } as PPCommand,
+      ...(k < waits.length ? [{ type: 'wait', data: { waitTime: waits[k] } } as PPCommand] : []),
+    ]);
+    const plan = steps.map((c) => (c.type === 'path' ? `“${c.data.pathName}”` : `wait ${c.data.waitTime} s`)).join(' → ');
+    const users = await autosUsing(name, fresh.autos.map((f) => f.name));
+    const newAutoName = nameTaken(fresh.autos, name) ? nextFree(fresh.autos, name, []) : name;
+    if (!window.confirm(`PathPlanner can't pause inside a path, so Save will split “${name}” at its ⏸ Stop & wait marker${count > 1 ? 's' : ''}:\n\n  ${plan}\n\n`
+      + (users.length ? `These autos will drive the parts in order with the wait${waits.length > 1 ? 's' : ''}:\n  ${users.join('\n  ')}`
+        : `No auto uses “${name}” yet (a single path can't stop), so a new auto “${newAutoName}” will be created with these steps.`)
+      + `\n\nOK = split · Cancel = save without splitting (the robot won't stop)`)) return null;
+
+    openedMtime.current = await writePath(name, parts[0]);
+    for (let k = 1; k < parts.length; k++) await writePath(names[k], parts[k]);
+    let runAuto: string;
+    if (users.length) {
+      for (const a of users) {
+        const ad = await readAuto(a);
+        await writeAuto(a, { ...ad, command: expandPathIn(ad.command, name, steps) });
+      }
+      runAuto = users[0];
+    } else {
+      await writeAuto(newAutoName, { ...newAuto(), command: { type: 'sequential', data: { commands: steps } } });
+      runAuto = newAutoName;
+    }
+    splitAuto.current = runAuto;
+    // The file now holds only the first part; undo can't un-split files
+    setDoc({ kind: 'path', name, data: parts[0] });
+    setSavedJson(JSON.stringify(parts[0]));
+    setPast([]); setFuture([]); setSel(null); setPreview(null);
+    setStatus(`Split into ${names.map((x) => `“${x}”`).join(', ')}. ${users.length ? `Updated ${users.join(', ')}` : `Created auto “${newAutoName}”`}. Change the wait in the auto's steps; drag the joining waypoint to move the stop.`);
+    return true;
   };
 
   const createNew = async (kind: 'path' | 'auto') => {
@@ -113,13 +215,23 @@ export function PlanTab({ variant, onRun }: Props) {
     while (existing.has(name.toLowerCase())) name = `${base} ${k++}`;
     const input = window.prompt(`Name for the new ${kind}:`, name);
     if (!input) return;
-    if (!validName(input) || existing.has(input.toLowerCase())) { setStatus(`"${input}" is not a valid new name`); return; }
+    const fresh = await listFiles();
+    if (!validName(input) || nameTaken(kind === 'path' ? fresh.paths : fresh.autos, input)) { setStatus(`"${input}" is not a valid new name`); return; }
     const W = fieldV.width;
     const data = kind === 'path' ? newPath({ x: 2.5, y: W / 2 + 1.5 }, { x: 6.5, y: W / 2 + 2.6 }, settings ?? undefined) : newAuto();
-    if (kind === 'path') await writePath(input, data as PPPath); else await writeAuto(input, data as PPAuto);
+    openedMtime.current = kind === 'path' ? await writePath(input, data as PPPath) : await writeAuto(input, data as PPAuto);
     await refresh();
     const d = kind === 'path' ? { kind, name: input, data: data as PPPath } as Doc : { kind, name: input, data: data as PPAuto } as Doc;
     setDoc(d); setSavedJson(JSON.stringify(d.data)); setPast([]); setFuture([]); setSel(null); setPreview(null);
+  };
+
+  /** Autos whose steps use the path `name`. */
+  const autosUsing = async (name: string, autoNames: string[]) => {
+    const users: string[] = [];
+    for (const a of autoNames) {
+      try { if (autoPathNames((await readAuto(a)).command).includes(name)) users.push(a); } catch { /* unreadable: skip */ }
+    }
+    return users;
   };
 
   const renameDoc = async () => {
@@ -127,14 +239,52 @@ export function PlanTab({ variant, onRun }: Props) {
     const input = window.prompt('New name:', doc.name);
     if (!input || input === doc.name) return;
     if (!validName(input)) { setStatus(`"${input}" is not a valid name`); return; }
-    if (doc.kind === 'path') {
-      await writePath(input, doc.data);
-      await deletePath(doc.name);
-      setStatus(`Renamed. Autos that use "${doc.name}" must be updated to "${input}".`);
-    } else {
-      await writeAuto(input, doc.data);
-      await deleteAuto(doc.name);
+    const fresh = await listFiles();
+    const list = doc.kind === 'path' ? fresh.paths : fresh.autos;
+    // "test path" → "Test Path" is the SAME file on macOS/Windows: writing the new
+    // name and deleting the old one would delete it. Go through a temp name.
+    const caseOnly = input.toLowerCase() === doc.name.toLowerCase();
+    if (!caseOnly && nameTaken(list, input)) { setStatus(`A ${doc.kind} named "${input}" already exists. Pick another name.`); return; }
+    const write = (n: string) => (doc.kind === 'path' ? writePath(n, doc.data) : writeAuto(n, doc.data as PPAuto));
+    const remove = doc.kind === 'path' ? deletePath : deleteAuto;
+    try {
+      if (caseOnly) {
+        const tmp = `__rename-${Date.now()}`;
+        await write(tmp);
+        await remove(doc.name);
+        openedMtime.current = await write(input);
+        await remove(tmp);
+      } else {
+        openedMtime.current = await write(input);
+        await remove(doc.name);
+      }
+    } catch (e) {
+      setStatus(`Rename failed: ${e}`);
+      refresh();
+      return;
     }
+    let msg = `Renamed to "${input}".`;
+    if (doc.kind === 'path' && !caseOnly) {
+      const users = await autosUsing(doc.name, fresh.autos.map((f) => f.name));
+      if (users.length && window.confirm(`These autos use "${doc.name}":\n\n${users.join('\n')}\n\nUpdate them to use "${input}"?`)) {
+        for (const a of users) {
+          const data = await readAuto(a);
+          await writeAuto(a, { ...data, command: renamePathIn(data.command, doc.name, input) });
+        }
+        msg += ` Updated ${users.length} auto${users.length > 1 ? 's' : ''}.`;
+      } else if (users.length) {
+        msg += ` ${users.join(', ')} still use${users.length === 1 ? 's' : ''} the old name.`;
+      }
+    } else if (doc.kind === 'path' && caseOnly) {
+      // Only the case changed: autos that spell it the old way must be updated too
+      const users = await autosUsing(doc.name, fresh.autos.map((f) => f.name));
+      for (const a of users) {
+        const data = await readAuto(a);
+        await writeAuto(a, { ...data, command: renamePathIn(data.command, doc.name, input) });
+      }
+      if (users.length) msg += ` Updated ${users.length} auto${users.length > 1 ? 's' : ''}.`;
+    }
+    setStatus(msg);
     setDoc({ ...doc, name: input } as Doc);
     setSavedJson(JSON.stringify(doc.data));
     refresh();
@@ -143,8 +293,13 @@ export function PlanTab({ variant, onRun }: Props) {
   const duplicateDoc = async () => {
     if (!doc || doc.kind === 'settings') return;
     const input = window.prompt('Name for the copy:', `${doc.name} copy`);
-    if (!input || !validName(input)) return;
-    if (doc.kind === 'path') await writePath(input, doc.data); else await writeAuto(input, doc.data);
+    if (!input) return;
+    const fresh = await listFiles();
+    if (!validName(input) || nameTaken(doc.kind === 'path' ? fresh.paths : fresh.autos, input)) {
+      setStatus(`"${input}" is not a valid new name (it may already exist)`);
+      return;
+    }
+    openedMtime.current = doc.kind === 'path' ? await writePath(input, doc.data) : await writeAuto(input, doc.data);
     await refresh();
     setDoc({ ...doc, name: input } as Doc);
     setSavedJson(JSON.stringify(doc.data));
@@ -152,7 +307,9 @@ export function PlanTab({ variant, onRun }: Props) {
 
   const deleteDoc = async () => {
     if (!doc || doc.kind === 'settings') return;
-    if (!window.confirm(`Delete ${doc.kind} "${doc.name}"? (a backup is kept in sim-ui/.sim-backup)`)) return;
+    const users = doc.kind === 'path' ? await autosUsing(doc.name, files?.autos.map((f) => f.name) ?? []) : [];
+    const warning = users.length ? `\n\n⚠ Used by: ${users.join(', ')} — they will fail to build.` : '';
+    if (!window.confirm(`Delete ${doc.kind} "${doc.name}"? (a backup is kept in sim-ui/.sim-backup)${warning}`)) return;
     if (doc.kind === 'path') await deletePath(doc.name); else await deleteAuto(doc.name);
     setDoc(null); setSavedJson(''); refresh();
   };
@@ -166,7 +323,8 @@ export function PlanTab({ variant, onRun }: Props) {
     const d = docRef.current;
     if (!d) return;
     if (pushHistory) { setPast((p) => [...p.slice(-99), JSON.stringify(d.data)]); setFuture([]); }
-    const next = { ...d, data } as Doc;
+    // speed markers always reach to the next one / the path end, whatever was edited
+    const next = { ...d, data: d.kind === 'path' ? normalizeSpeedZones(data as PPPath) : data } as Doc;
     docRef.current = next;
     setDoc(next);
     if (pushHistory) setPreview(null);
@@ -238,6 +396,11 @@ export function PlanTab({ variant, onRun }: Props) {
     for (let k = 0; k < path.eventMarkers.length; k++) {
       if (near(pointAt(path, path.eventMarkers[k].waypointRelativePos), 0.15)) return { type: 'marker', i: k };
     }
+    const zones = path.constraintZones ?? [];
+    for (let k = 0; k < zones.length; k++) {
+      const z = zones[k];
+      if (isSpeedZone(z) && near(pointAt(path, z.minWaypointRelativePos), 0.15)) return { type: 'speed', i: k };
+    }
     return null;
   };
 
@@ -247,7 +410,7 @@ export function PlanTab({ variant, onRun }: Props) {
     if (h) {
       setSel(h.type === 'rotHandle' ? { type: 'rot', i: h.i } : h);
       dragging.current = h;
-      update(path, true); // snapshot for undo before the drag
+      dragMoved.current = false; // undo is recorded on the first real move (a plain click keeps redo)
       return;
     }
     if (tool === 'add') {
@@ -276,10 +439,18 @@ export function PlanTab({ variant, onRun }: Props) {
       const pos = Math.round(nearestPos(path, p.x, p.y).pos * 100) / 100;
       next = { ...path, rotationTargets: path.rotationTargets.map((t, k) => (k === d.i ? { ...t, waypointRelativePos: pos } : t)) };
     } else if (d.type === 'marker') {
-      const pos = Math.round(nearestPos(path, p.x, p.y).pos * 100) / 100;
+      let pos = Math.round(nearestPos(path, p.x, p.y).pos * 100) / 100;
+      const n = path.waypoints.length - 1;
+      if (isStopMarker(path.eventMarkers[d.i])) pos = Math.min(Math.max(pos, STOP_MARGIN), n - STOP_MARGIN);
       next = { ...path, eventMarkers: path.eventMarkers.map((m, k) => (k === d.i ? { ...m, waypointRelativePos: pos } : m)) };
+    } else if (d.type === 'speed') {
+      const pos = Math.min(Math.round(nearestPos(path, p.x, p.y).pos * 100) / 100, path.waypoints.length - 1.01);
+      next = { ...path, constraintZones: (path.constraintZones ?? []).map((z, k) => (k === d.i ? { ...(z as object), minWaypointRelativePos: pos } : z)) };
     }
-    if (next !== path) update(next, false);
+    if (next !== path) {
+      update(next, !dragMoved.current); // first move: snapshot the pre-drag path for undo
+      dragMoved.current = true;
+    }
   };
 
   const onUp = () => { dragging.current = null; };
@@ -337,8 +508,11 @@ export function PlanTab({ variant, onRun }: Props) {
   // ── run ───────────────────────────────────────────────────────────────────
   const runThis = async () => {
     if (!doc || doc.kind === 'settings') return;
-    if (dirty && !(await save())) return;
-    onRun(doc.kind === 'path' ? 1 : 0, doc.name);
+    splitAuto.current = null;
+    if ((dirty || hasStops) && !(await save())) return;
+    // a path that was just split runs as the auto that drives its parts
+    if (splitAuto.current) onRun(0, splitAuto.current);
+    else onRun(doc.kind === 'path' ? 1 : 0, doc.name);
   };
 
   const namedOptions = useMemo(() => [...new Set(ntNamed)].sort(), [ntNamed]);
@@ -377,7 +551,7 @@ export function PlanTab({ variant, onRun }: Props) {
             <>
               <strong className="doc-title">{doc.name}{dirty ? ' •' : ''}</strong>
               <span className="muted small">{doc.kind === 'path' ? '.path' : '.auto'}</span>
-              <button onClick={save} disabled={!dirty} title="Save (Ctrl/Cmd+S)">Save</button>
+              <button onClick={save} disabled={!dirty && !hasStops} title="Save (Ctrl/Cmd+S)">Save</button>
               <button onClick={undo} disabled={!past.length} title="Undo (Ctrl/Cmd+Z)">↶</button>
               <button onClick={redo} disabled={!future.length} title="Redo (Shift+Ctrl/Cmd+Z)">↷</button>
               <span className="toolbar-sep" />
@@ -417,6 +591,11 @@ export function PlanTab({ variant, onRun }: Props) {
                 </g>
               );
             })}
+            {auto && waitsAfterPaths(auto.command).map((w, k) => {
+              const ap = autoPaths.find((x) => x.name === w.pathName);
+              if (!ap) return null;
+              return <StopGlyph key={`stop${k}`} at={ap.path.waypoints[ap.path.waypoints.length - 1].anchor} seconds={w.seconds} className="auto-stop" />;
+            })}
             {ghost && <RobotShape pose={[ghost[1], ghost[2], ghost[3]]} size={size} style="preview" />}
           </FieldView>
           {tool === 'add' && <div className="field-banner">Click to add a waypoint at the end of the path · Esc to stop</div>}
@@ -442,6 +621,8 @@ export function PlanTab({ variant, onRun }: Props) {
               <li>These are the robot project's real PathPlanner files (<code>src/main/deploy/pathplanner</code>). The PathPlanner app opens the same files.</li>
               <li>Drag waypoints (circles) and their handles. Drag the small dots in front of the robot outlines to set heading.</li>
               <li>Event markers (◆) run a named command while driving. Steps in an auto run one after another.</li>
+              <li><b>Speed markers</b> (▼ blue / ▲ green) change the max speed from that point on.</li>
+              <li>A <b>⏸ Stop &amp; wait</b> marker stops the robot for a few seconds; Save splits the path there and adds the wait to the autos.</li>
               <li>Red dots mean the bumpers would hit something.</li>
               <li><b>◷ Preview</b> shows timing; <b>▶ Run this</b> runs it through the real robot code.</li>
             </ul>

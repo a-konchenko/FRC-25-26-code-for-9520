@@ -1,6 +1,7 @@
 // SVG layer (inside FieldView) that draws an editable PathPlanner path.
 import { FieldText } from '../../field/FieldView';
 import { RobotShape } from '../../field/RobotShape';
+import { isSpeedZone, isStopMarker, maxSpeedAt } from '../../pathplanner/edit';
 import { pointAt, type PathSample } from '../../pathplanner/geometry';
 import type { Collision } from '../../pathplanner/collision';
 import type { PPPath, XY } from '../../pathplanner/types';
@@ -71,10 +72,30 @@ export function PathLayer({ path, samples, sel, size, collisions, showFootprint,
         );
       })}
 
+      {/* speed markers: the stretch they cover, and a ▲/▼ at their start */}
+      {(path.constraintZones ?? []).map((z, k) => {
+        if (!isSpeedZone(z)) return null;
+        const at = pointAt(path, z.minWaypointRelativePos);
+        const before = z.minWaypointRelativePos <= 1e-9 ? path.globalConstraints.maxVelocity : maxSpeedAt(path, z.minWaypointRelativePos - 1e-3);
+        const up = z.constraints.maxVelocity > before + 1e-9;
+        const active = sel?.type === 'speed' && sel.i === k;
+        const pts = samples.filter((q) => q.pos >= z.minWaypointRelativePos && q.pos <= z.maxWaypointRelativePos).map((q) => `${q.x},${q.y}`).join(' ');
+        const s = 0.12, d = up ? 1 : -1; // field y is up: ▲ points to +y
+        return (
+          <g key={`sz${k}`} className={`plan-speed ${up ? 'up' : 'down'} ${active ? 'active' : ''}`}>
+            <title>{`${up ? 'Speed up' : 'Slow down'} to ${z.constraints.maxVelocity} m/s (from ${z.minWaypointRelativePos.toFixed(2)} to ${z.maxWaypointRelativePos.toFixed(2)})`}</title>
+            <polyline points={pts} className="plan-speed-zone" />
+            <polygon points={`${at.x - s},${at.y - d * s * 0.7} ${at.x + s},${at.y - d * s * 0.7} ${at.x},${at.y + d * s}`} />
+            <FieldText x={at.x} y={at.y - 0.26} className="plan-marker-label">{`${+z.constraints.maxVelocity.toFixed(2)} m/s`}</FieldText>
+          </g>
+        );
+      })}
+
       {/* event markers */}
       {path.eventMarkers.map((m, k) => {
         const at = pointAt(path, m.waypointRelativePos);
         const active = sel?.type === 'marker' && sel.i === k;
+        if (isStopMarker(m)) return <StopGlyph key={`em${k}`} at={at} seconds={m.command?.data.waitTime ?? 0} className={`plan-stop ${active ? 'active' : ''}`} />;
         const s = 0.11;
         return (
           <g key={`em${k}`} className={`plan-marker ${active ? 'active' : ''}`}>
@@ -94,6 +115,20 @@ export function PathLayer({ path, samples, sel, size, collisions, showFootprint,
           <FieldText x={w.anchor.x} y={w.anchor.y} className="plan-anchor-label">{i}</FieldText>
         </g>
       ))}
+    </g>
+  );
+}
+
+/** ⏸ square + "3 s" label: where the robot stops and waits. */
+export function StopGlyph({ at, seconds, className }: { at: XY; seconds: number; className: string }) {
+  const h = 0.1, bar = 0.035;
+  return (
+    <g className={className}>
+      <title>{`Stop & wait ${seconds} s`}</title>
+      <rect x={at.x - h} y={at.y - h} width={2 * h} height={2 * h} rx={0.02} />
+      <line x1={at.x - bar} y1={at.y - h * 0.55} x2={at.x - bar} y2={at.y + h * 0.55} />
+      <line x1={at.x + bar} y1={at.y - h * 0.55} x2={at.x + bar} y2={at.y + h * 0.55} />
+      <FieldText x={at.x} y={at.y + 0.24} className="plan-marker-label">{`${+seconds.toFixed(2)} s`}</FieldText>
     </g>
   );
 }

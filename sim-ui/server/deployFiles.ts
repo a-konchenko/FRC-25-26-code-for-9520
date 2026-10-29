@@ -17,6 +17,24 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ALLOWED = /^(paths\/[^/\\]+\.path|autos\/[^/\\]+\.auto|settings\.json)$/;
+/** Temp files are "<file>.tmp-<pid>-<n>" next to the target, so the rename is atomic. */
+const TMP_MARK = '.tmp-';
+let tmpCounter = 0;
+
+/** Leftover temp files from a crashed save would be deployed to the roboRIO — remove them. */
+async function removeStaleTemps(ppDir: string) {
+  for (const sub of ['', 'paths', 'autos']) {
+    const dir = join(ppDir, sub);
+    let names: string[] = [];
+    try { names = await fs.readdir(dir); } catch { continue; }
+    for (const n of names) {
+      if (/\.(path|auto|json)\.tmp-\d+(-\d+)?$/.test(n)) {
+        await fs.rm(join(dir, n), { force: true });
+        console.log(`  Removed leftover temp file: ${join(sub, n)}`);
+      }
+    }
+  }
+}
 
 export function deployFiles(): Plugin {
   const robotDir = resolve(process.env.ROBOT_PROJECT_DIR ?? join(here, '../../Swerve9520 ctre tuner x project (og home base ver.)'));
@@ -83,9 +101,16 @@ export function deployFiles(): Plugin {
       try { JSON.parse(text); } catch { return send(400, { error: 'body is not valid JSON' }); }
       await backup(rel, abs);
       mkdirSync(dirname(abs), { recursive: true });
-      const tmp = `${abs}.tmp-${process.pid}`;
-      await fs.writeFile(tmp, text, 'utf8');
-      await fs.rename(tmp, abs);
+      // Unique temp name per write (two saves of one file can overlap), removed
+      // if anything fails, so a half-written file never reaches the roboRIO.
+      const tmp = `${abs}${TMP_MARK}${process.pid}-${++tmpCounter}`;
+      try {
+        await fs.writeFile(tmp, text, 'utf8');
+        await fs.rename(tmp, abs);
+      } catch (e) {
+        await fs.rm(tmp, { force: true });
+        throw e;
+      }
       const st = await fs.stat(abs);
       return send(200, { ok: true, mtime: st.mtimeMs });
     }
@@ -111,6 +136,7 @@ export function deployFiles(): Plugin {
         });
       });
       console.log(`  PathPlanner files: ${ppDir}`);
+      removeStaleTemps(ppDir).catch(() => { /* best effort */ });
     },
   };
 }

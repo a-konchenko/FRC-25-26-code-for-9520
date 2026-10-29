@@ -67,6 +67,8 @@ The PathPlanner app opens the same files, and PathPlannerLib on the robot runs t
 | Purple robot outlines at start/end | Start and end pose. Drag the small circle in front of each outline to set the heading. |
 | Dashed outlines along the path | Rotation targets (heading at a point). Drag the dot to slide it along the path, or the circle to turn it. |
 | ◆ Orange diamonds | Event markers: a named command that runs **while driving** (drag along the path). |
+| ▼ Blue / ▲ green triangles + "m/s" | **Speed markers**: from that point on the max speed is this, until the next speed marker or the path end (shaded along the path). |
+| ⏸ Red squares + "3 s" | **Stop & wait** markers: the robot stops there, waits that many seconds, then drives on (see below). |
 | Faint outlines | The robot's footprint along the path. **Red dots** mean the bumpers hit the Hub, Tower or a wall. |
 
 - **＋ Waypoint** adds waypoints at the end. *Insert after* and *Delete* are in the Waypoints panel.
@@ -79,6 +81,36 @@ The PathPlanner app opens the same files, and PathPlannerLib on the robot runs t
   until all finish, *race* = until any finishes, *deadline* = until the first
   finishes) holding **path**, **named** and **wait** steps. The field draws the
   paths in order.
+- **Speed markers** (*＋ Speed*): max velocity and acceleration from a point on, until the
+  next speed marker or the end of the path. Stored as ordinary PathPlanner
+  **constraint zones** named `Speed marker (N m/s)`; the editor keeps each zone's end
+  at the next marker (`edit.ts` `normalizeSpeedZones`, run on every path edit), so
+  the robot and the PathPlanner app read them as normal zones. Zone limits *replace*
+  the path's limits inside the zone (PathPlannerLib `constraintsForWaypointPos`,
+  first matching zone wins), so a marker can also go faster than the path limit;
+  above 4.44 m/s it warns. Zones made in the PathPlanner app are kept unchanged and
+  take priority where they overlap. ◷ Preview with the sim running includes them;
+  the offline approximate preview does not.
+- **Stop & wait** (Event markers → *＋ Stop & wait*): a marker with a variable wait
+  (default 3 s). PathPlannerLib can't pause inside a path (markers run alongside the
+  driving), so while editing it is stored as an ordinary event marker named
+  `Stop & wait` with a `wait` command (harmless if the file is saved unsplit), and
+  **Save splits the path** there (`edit.ts` `splitAtStops`):
+  - the curve is cut exactly (de Casteljau); the first part keeps the name, the rest
+    become `name 2`, `name 3`…; part 1 ends at rest and part 2 starts at rest, both
+    facing the heading the path had at the cut;
+  - the joint is a **linked waypoint** (`linkedName` `"name → name 2"`). Saving a path
+    moves the same linked waypoint in every other path, like the PathPlanner app, so
+    dragging the joint moves the stop;
+  - rotation targets, event markers, constraint and point-towards zones go to the
+    part they fall in (zones/zoned markers spanning the cut are clipped into both);
+  - every auto that uses the path gets `path → wait N s → path 2` (inline in a
+    sequential group, wrapped in one elsewhere). No auto uses it → a new auto with
+    those steps is created (a single path can't stop). A confirm dialog lists all
+    of this first; Cancel saves without splitting.
+  - The auto view draws ⏸ with the seconds where a path step is followed by a wait.
+    Change the wait in the auto's steps afterwards. Undo can't un-split files
+    (backups are in `sim-ui/.sim-backup/`).
 - **Robot settings** edits `settings.json` (mass, MOI, wheel friction, gearing, max
   speed). Values marked * are placeholders.
 - Every first save or delete of a file keeps a backup in `sim-ui/.sim-backup/`
@@ -298,6 +330,8 @@ run on the real robot.
 | ★ NT4 web client | ❌ | `sim-ui/src/nt/nt4.ts` | 1 | ✅ done |
 | ★ Plan tab (PathPlanner-style editor) | ❌ | `sim-ui/src/tabs/PlanTab`, `sim-ui/src/pathplanner/` | 2 | ✅ done |
 | ★ PathPlanner file API (dev server) | ❌ | `sim-ui/server/deployFiles.ts` | 2 | ✅ done |
+| ★ Speed markers (constraint zones) | ❌ | `sim-ui/src/pathplanner/edit.ts` (`normalizeSpeedZones`), `tabs/PlanTab` | 5 | ✅ done |
+| ★ Stop & wait marker (splits the path on Save) | ❌ | `sim-ui/src/pathplanner/edit.ts` (`splitAtStops`), `tabs/PlanTab` | 5 | ✅ done |
 | ★ Match control (Play / Reset / 20 s auto) | ❌ | `sim/SimControl.java` | 2 | ✅ done |
 | ★ Path logging (plan + setpoint) | ❌ | `sim/PathLogging.java` | 2 | ✅ done |
 | ★ Exact preview (PathPlannerLib timing) | ❌ | `sim/PlanPreview.java` | 2 | ✅ done |
@@ -350,7 +384,13 @@ robot jumped forward after every pause. This method only runs in simulation.
 | Auto chooser | `RobotContainer.java` | Hand-written autos are kept. Every `.auto` file is added as "PP: <name>". |
 | `setIntake(boolean)` | `RobotContainer.java` | Explicit on/off (the X toggle uses it). |
 | Telemetry listeners | `CommandSwerveDrivetrain.java` | `registerTelemetry` is overridden so the robot code's telemetry still works and extra listeners can be added (`addTelemetryListener`). Nothing registers one on the robot; the sim's world model does. |
-| `setAutonomousOverride` / `getHandCodedAutos` / `getNamedCommandNames` | `RobotContainer.java` | Used only by the simulator; `getAutonomousCommand()` returns the chooser selection unless the sim set an override. |
+| `setAutonomousOverride` / `hasAutonomousOverride` / `getHandCodedAutos` / `getNamedCommandNames` | `RobotContainer.java` | Used only by the simulator; `getAutonomousCommand()` returns the chooser selection unless the sim set an override. |
+
+### Review fixes (2026-10-28)
+
+| Change | File | What it does on the robot |
+|---|---|---|
+| `shootFor` moved to `ShootCommands.shootFor` | `commands/ShootCommands.java`, `RobotContainer.java` | **No behavior change** (same commands, same 1.5 s spin-up timeout, still feeds if the flywheel never reaches speed — team decision). Moved so `ShootCommandsTest` can pin the timing. |
 
 ### Phases 3–4 (affect the real robot)
 
@@ -436,7 +476,8 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `/Sim/ActivePath` | double[] | {x, y, θ} × N: the path being followed (already flipped for red); empty when none |
 | `/Sim/ActivePathName` | string | |
 | `/Sim/Setpoint`, `/Sim/SetpointActive` | double[3], boolean | Where the path follower wants the robot now |
-| `/Sim/Run/state` | string | idle / armed / running / finished |
+| `/Sim/Run/state` | string | idle / disarming / armed / running / finished (`disarming`: Play while enabled waits one robot loop disabled, so `autonomousInit` runs again) |
+| `/Sim/Run/overrideActive` | boolean | An auto is queued in `RobotContainer` for the next autonomous enable |
 | `/Sim/Run/id`, `name`, `kind`, `elapsed`, `commandEnd`, `duration`, `error` | | Current run: `commandEnd` = seconds when the auto command finished (−1 = still running or never) |
 | `/Sim/Autos/pathplanner`, `paths`, `handCoded` | string[] | What can be played |
 | `/Sim/NamedCommands` | string[] | Registered named commands |
@@ -501,6 +542,7 @@ Run each with the robot sim running:
 - `node scripts/preview-test.ts`: requests the exact preview of `Test path`.
 - `node scripts/vision-test.ts`: kidnap with cameras on/off, LL4 aim, `Shoot All (Stationary)` scoring.
 - `node scripts/pv-test.ts`: enables the PhotonVision cameras and checks that they correct a kidnap.
+- `node scripts/run-control-test.ts`: Play while an auto runs restarts it; a failed build or Stop leaves no auto queued; 300 teleports during a path don't stall the robot loop.
 - `node scripts/field-fuel-test.ts`: FUEL staging (504), bumper push, intake pickup and capacity, chute release, scored FUEL coming back out of the hub, physics time.
 - `npm run gen-field`: regenerates `field-2026.json` (UI and Java copies).
 

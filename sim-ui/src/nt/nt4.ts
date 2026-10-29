@@ -204,9 +204,13 @@ export class NT4Client {
   }
 
   private sendValue(pub: Pub, value: NTValue): void {
+    // Disconnected: queue nothing. Settings (retain) are re-sent from pub.last
+    // when the connection comes back; one-shot actions clicked meanwhile must
+    // never be replayed into a (possibly restarted) robot.
+    if (!this.connected) return;
     // Never send before the clock is synced: a value stamped with the wrong
     // clock would make later (correctly stamped) values look "older".
-    if (!this.connected || this.serverOffsetUs === null) {
+    if (this.serverOffsetUs === null) {
       this.pendingValues = this.pendingValues.filter((p) => p.pub !== pub || !pub.retain);
       this.pendingValues.push({ pub, value });
       return;

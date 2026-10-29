@@ -208,7 +208,7 @@ export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: 
 
   // ── summary of the recorded run ───────────────────────────────────────────
   const summary = summarize(frames.current);
-  const running = runState === 'running' || runState === 'armed';
+  const running = runState === 'running' || runState === 'armed' || runState === 'disarming';
   const shownT = scrubT ?? (running || runState === 'finished' ? runElapsed : 0);
   const locErrCm = driftState[2] * 100;
   const activePts: [number, number][] = [];

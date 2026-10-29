@@ -37,16 +37,28 @@ import frc.robot.RobotContainer;
  *
  * kind: 0 = PathPlanner auto (.auto), 1 = single path (.path), 2 = hand-coded
  * auto from RobotContainer.
+ *
+ * The robot code checks its mode once per loop, at the start of the loop, so a
+ * disable and re-enable within one loop is never seen (Robot.autonomousInit
+ * would not run again). DriverStationSim updates DriverStation.isEnabled()
+ * immediately, so that can't tell us what the robot code saw. Play while the
+ * robot is enabled therefore DISARMS first: it disables, waits at least one
+ * full robot loop (the robot code then runs disabledInit), and only then enables.
  */
 public class SimControl {
     public static final double kAutoDurationS = 20.0; // 2026 game manual 7.4.1
+    /** Give up if the robot code doesn't disable / start autonomous within this long. */
+    static final double kArmTimeoutS = 3.0;
 
     private final SimManager     sim;
     private final RobotContainer container;
     private final SimNT          nt;
 
-    private enum State { IDLE, ARMED, RUNNING, FINISHED }
+    private enum State { IDLE, DISARMING, ARMED, RUNNING, FINISHED }
     private State   state = State.IDLE;
+    private double  stateSince = 0.0;
+    /** update() calls (= robot loops) so far, and the loop the current state started in. */
+    private long    loop = 0, stateLoop = 0;
     private Command runCommand = null;
     private double  runStart = 0.0;
     private double  commandEnd = -1.0;
@@ -64,6 +76,7 @@ public class SimControl {
     }
 
     public void update() {
+        loop++;
         double now = Timer.getFPGATimestamp();
         if (now - lastListPublish > 1.0) {
             publishLists();
@@ -77,12 +90,24 @@ public class SimControl {
         if (reset != null) reset(nt.settingString("run/name", ""), reset);
 
         switch (state) {
+            case DISARMING -> {
+                // A later loop than the one Play disabled in: the robot code has seen "disabled"
+                if (loop > stateLoop && DriverStation.isDisabled()) {
+                    sim.setEnabled(true, true);
+                    state = State.ARMED;
+                    stateSince = now;
+                } else if (now - stateSince > kArmTimeoutS) {
+                    giveUp("the robot code did not disable");
+                }
+            }
             case ARMED -> {
                 if (DriverStation.isAutonomousEnabled()) {
                     state = State.RUNNING;
                     runStart = now;
                     commandEnd = -1.0;
                     lastElapsed = 0.0;
+                } else if (now - stateSince > kArmTimeoutS) {
+                    giveUp("the robot code never started autonomous");
                 }
             }
             case RUNNING -> {
@@ -104,7 +129,11 @@ public class SimControl {
 
     /** The UI's Stop button / test drive also end a run. */
     public void stop() {
-        if (state == State.ARMED || state == State.RUNNING) finish();
+        if (active()) finish();
+    }
+
+    private boolean active() {
+        return state == State.DISARMING || state == State.ARMED || state == State.RUNNING;
     }
 
     private void finish() {
@@ -113,12 +142,25 @@ public class SimControl {
         sim.setEnabled(false, false);
     }
 
+    /** A run that never got going: never leave its command queued for the next autonomous enable. */
+    private void giveUp(String why) {
+        lastError = kindName(runKind) + " '" + runName + "': " + why;
+        System.out.println("[Sim] Play stopped: " + lastError);
+        container.setAutonomousOverride(null);
+        sim.setEnabled(false, false);
+        state = State.IDLE;
+    }
+
     // ── Play / Reset ────────────────────────────────────────────────────────
 
     private void play(String name, double[] args) {
         int kind = (int) arg(args, 0);
         boolean red = arg(args, 1) > 0.5;
+        // What the robot code saw this loop (it reads the DS once per loop)
+        boolean wasEnabled = DriverStation.isEnabled();
         sim.cancelTestDrive();
+        if (runCommand != null && runCommand.isScheduled()) runCommand.cancel();
+        container.setAutonomousOverride(null); // a failed build must not leave the old run queued
         sim.setEnabled(false, false);
         setAlliance(red);
 
@@ -132,16 +174,23 @@ public class SimControl {
         runKind = kind;
         runId++;
         container.setAutonomousOverride(runCommand);
-        sim.setEnabled(true, true);
-        state = State.ARMED;
-        System.out.println("[Sim] Play " + kindName(kind) + " '" + name + "' (" + (red ? "red" : "blue") + ")");
+        if (wasEnabled) {
+            state = State.DISARMING; // enable once the robot code has seen the disable (see update)
+        } else {
+            sim.setEnabled(true, true);
+            state = State.ARMED;
+        }
+        stateSince = Timer.getFPGATimestamp();
+        stateLoop = loop;
+        System.out.println("[Sim] Play" + kindName(kind) + " '" + name + "' (" + (red ? "red" : "blue") + ")");
     }
 
     private void reset(String name, double[] args) {
         int kind = (int) arg(args, 0);
         boolean red = arg(args, 1) > 0.5;
         sim.cancelTestDrive();
-        if (state == State.ARMED || state == State.RUNNING) finish();
+        if (active()) finish();
+        container.setAutonomousOverride(null);
         sim.setEnabled(false, false);
         setAlliance(red);
         Built built = build(kind, name, red);
@@ -229,6 +278,7 @@ public class SimControl {
         nt.number("Run/commandEnd", commandEnd);
         nt.number("Run/duration", kAutoDurationS);
         nt.string("Run/error", lastError);
+        nt.bool("Run/overrideActive", container.hasAutonomousOverride());
     }
 
     private static double arg(double[] a, int i) { return a != null && i < a.length ? a[i] : 0.0; }
