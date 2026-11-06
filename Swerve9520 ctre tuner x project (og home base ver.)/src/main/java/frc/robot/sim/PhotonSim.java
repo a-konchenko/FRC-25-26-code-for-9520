@@ -82,6 +82,16 @@ public class PhotonSim {
         suppressUntil = edu.wpi.first.wpilibj.Timer.getFPGATimestamp() + seconds;
     }
 
+    /**
+     * The sim switched fields: the cameras now see that field's tags (none on
+     * B8). Each PhotonCameraSim keeps the 2026 layout it was built with for its
+     * multi-tag solve, which only matters once a tag is actually in view.
+     */
+    public void setField(FieldModel field) {
+        visionSim.clearAprilTags();
+        visionSim.addAprilTags(field.tags);
+    }
+
     /** Call once per loop with the CURRENT true pose (PhotonLib applies latency itself). */
     public void update(Pose2d truthNow) {
         if (!enabled || cameraSims.isEmpty()) return;

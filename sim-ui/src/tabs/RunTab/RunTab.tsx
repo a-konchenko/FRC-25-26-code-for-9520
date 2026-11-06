@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FieldView, type FieldPointer } from '../../field/FieldView';
 import { RobotShape, Trace } from '../../field/RobotShape';
-import { FIELD, type Variant } from '../../field/fieldData';
+import { FIELD, FIELDS, type Variant } from '../../field/fieldData';
 import { ntHost, sendAction, setSetting, useConnected, useNT, useNTFrame, type Pose } from '../../nt/store';
 import { DRIFT_FIELDS, DRIFT_PRESETS, expectedStraightErrorM, type DriftSettings } from '../../sim/drift';
 import { samplesForAlliance } from '../../pathplanner/geometry';
@@ -30,7 +30,7 @@ const KIND_LABEL: Record<RunKind, string> = { 0: 'Auto', 1: 'Path', 2: 'Hand-cod
 export function RunTab({ variant, runRequest }: { variant: Variant; runRequest: RunRequest | null }) {
   const connected = useConnected();
   const frame = useNTFrame();
-  const fieldV = FIELD.variants[variant];
+  const fieldV = FIELDS[variant];
 
   // ── live robot state ──────────────────────────────────────────────────────
   // truth + estimate arrive together (same robot loop) — see /Sim/TruthEstimate

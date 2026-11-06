@@ -179,10 +179,15 @@ Click or drag the chart to **scrub** the recorded run (REPLAY); **● Live** ret
 - **Test: square / spin**: scripted teleop drive (a 2 m square at 1.5 m/s, or two turns in place) to see drift without a joystick.
 - **Pause / Step 20 ms / Resume**: freezes robot time (code, physics and timers together), then steps one robot loop at a time.
 - **Drift panel**: presets plus a slider for each error source; see below.
-- **Field** (top right): AndyMark or Welded field. The robot code uses AndyMark.
+- **Field** (top right): AndyMark or Welded game field (the robot code uses AndyMark), or
+  **B8 practice**: Team 9520's practice space, a plain 15 × 11 ft rectangle with no AprilTags
+  and no field elements yet, drawn with a 1 ft grid. The robot sim follows the choice
+  (`/Sim/Control/field`): on B8 no FUEL is staged, the cameras see no tags, any run stops,
+  and the robot is placed in the middle facing +X. Use it for driving practice (below).
 
 To drive with the keyboard, run `./sim.sh` (with the GUI) and, in the WPILib sim
-GUI, drag "Keyboard 0" onto Joystick 0. The controls are the same as on the real robot.
+GUI, drag "Keyboard 0" onto Joystick 0, then set **Robot State** to *Teleoperated* there.
+The controls are the same as on the real robot; the Run tab shows the robot moving.
 
 ## Cameras (phase 3)
 
@@ -326,6 +331,7 @@ run on the real robot.
 | ★ Sim manager + NT bridge | ❌ | `sim/SimManager.java`, `sim/SimNT.java` | 1 | ✅ done |
 | ★ Scripted test drive | ❌ | `SimManager.startTestDrive` | 1 | ✅ done |
 | ★ Field model (2026 elements) | ❌ | `sim-ui/scripts/gen-field.mjs` → `field-2026.json` | 1 | ✅ done |
+| ★ Practice field B8 (15 × 11 ft, no targets) | ❌ | `gen-field.mjs` → `field-b8.json`, `sim/FieldModel.java`, `SimManager.setField` | 5 | ✅ done |
 | ★ Web UI (field, robot, traces, drift, chart) | ❌ | `sim-ui/` | 1 | ✅ done |
 | ★ NT4 web client | ❌ | `sim-ui/src/nt/nt4.ts` | 1 | ✅ done |
 | ★ Plan tab (PathPlanner-style editor) | ❌ | `sim-ui/src/tabs/PlanTab`, `sim-ui/src/pathplanner/` | 2 | ✅ done |
@@ -439,6 +445,14 @@ All coordinates use the WPILib blue origin, in meters: +X from the blue wall tow
   perimeter ≤ 110 in and height ≤ 30 in (R104); bumpers ≤ 4 in from the
   perimeter (R403), with foam ≥ 2.25 in (R402).
 
+**B8 practice field** (`field-b8.json`, same generator): Team 9520's practice space, a
+15 ft × 11 ft rectangle (4.572 × 3.3528 m, exact). Origin in a corner, +X along the 15 ft
+side, +Y along the 11 ft side, angles counter-clockwise, like the game field. No AprilTags
+and no elements yet (`elements: []`), so the cameras see nothing and no FUEL is staged;
+the robot starts in the middle facing +X. `FieldModel("b8")` loads it on the Java side and
+the UI draws a 1 ft grid. To add targets later: elements in `gen-field.mjs` (same schema
+as the 2026 ones), tags in the B8 branch of `FieldModel`.
+
 ## Placeholders: TO MEASURE
 
 All in [`SimRobotConstants.java`](../Swerve9520%20ctre%20tuner%20x%20project%20(og%20home%20base%20ver.)/src/main/java/frc/robot/sim/SimRobotConstants.java):
@@ -502,6 +516,8 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `/Sim/Robot/maxSpeedMps`, `ll3Mount`, `ll4Mount` | double / double[] | |
 | `/Sim/Field/tags/<andymark\|welded>` | double[] | {id, x, y, z, yaw, pitch} per tag |
 | `/Sim/Field/size/<variant>`, `/Sim/Field/robotCodeVariant` | | |
+| `/Sim/Field/tags/b8`, `/Sim/Field/size/b8` | double[] | B8: no tags yet (empty), {4.572, 3.3528} |
+| `/Sim/Field/active` | string | Field the sim is running: `2026` or `b8` |
 | `/Sim/Match/mode`, `/Sim/Match/time`, `/Sim/Match/alliance` | string / double | |
 | `/Sim/Clock/paused` | boolean | |
 | `/Sim/Time`, `/Sim/Heartbeat` | double | Robot time (s), loop counter |
@@ -512,6 +528,7 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 |---|---|---|
 | `drift/<field>` | double | Drift setting (latest value wins) |
 | `seed` | double | Random seed |
+| `field` | string | `2026` (game field) or `b8` (practice space); the sim switches when it changes |
 | `placeRobot` | double[] `[seq, x, y, θ]` | Move estimate + truth |
 | `kidnap` | double[] `[seq, x, y, θ]` | Move truth only |
 | `syncTruth` | double[] `[seq]` | Truth := estimate, reset drift |
@@ -544,7 +561,7 @@ Run each with the robot sim running:
 - `node scripts/pv-test.ts`: enables the PhotonVision cameras and checks that they correct a kidnap.
 - `node scripts/run-control-test.ts`: Play while an auto runs restarts it; a failed build or Stop leaves no auto queued; 300 teleports during a path don't stall the robot loop.
 - `node scripts/field-fuel-test.ts`: FUEL staging (504), bumper push, intake pickup and capacity, chute release, scored FUEL coming back out of the hub, physics time.
-- `npm run gen-field`: regenerates `field-2026.json` (UI and Java copies).
+- `npm run gen-field`: regenerates `field-2026.json` and `field-b8.json` (UI and Java copies).
 
 ---
 

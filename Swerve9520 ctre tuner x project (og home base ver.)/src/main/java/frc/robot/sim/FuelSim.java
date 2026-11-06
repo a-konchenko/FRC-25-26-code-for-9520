@@ -45,8 +45,8 @@ public class FuelSim {
 
     private final MechanismSims mech;
     private final Shooter shooter;
-    private final FieldModel field;
-    private final FieldFuel floor;
+    private FieldModel field;
+    private FieldFuel floor;
 
     public FuelSim(MechanismSims mech, Shooter shooter, FieldModel field) {
         this.mech = mech;
@@ -64,13 +64,26 @@ public class FuelSim {
         intakeRate = nt.setting("fuel/intakeRate", intakeRate);
     }
 
+    /** The sim switched fields: the floor FUEL now lives on the new field (call reset() to restage). */
+    public void setField(FieldModel field) {
+        this.field = field;
+        this.floor = new FieldFuel(field);
+        lastTruth = null;
+    }
+
     /** Start of a match: preload the robot and stage the other FUEL on the field (504 in all). */
     public void reset(long seed) {
-        remaining = Math.max(0, Math.min(preload, capacity));
         scored = missed = picked = 0;
         feedTimer = 0;
         intakeTokens = 0;
         shots.clear();
+        if (!field.hasGamePieces()) {
+            // Practice field (B8): no HUBs to score into, so no FUEL at all
+            remaining = 0;
+            floor.restage(seed, 0, 0, 0);
+            return;
+        }
+        remaining = Math.max(0, Math.min(preload, capacity));
         int depots = 2 * SimRobotConstants.kFuelPerDepot, chutes = 2 * SimRobotConstants.kFuelPerChute;
         floor.restage(seed, SimRobotConstants.kFuelTotal - depots - chutes - remaining,
             SimRobotConstants.kFuelPerDepot, SimRobotConstants.kFuelPerChute);
@@ -148,7 +161,7 @@ public class FuelSim {
 
     public void publish(SimNT nt) {
         // {in robot, scored, missed, preload, on field, in hubs, blue chute, red chute, capacity, total, picked up}
-        nt.array("Fuel/state", new double[] { remaining, scored, missed, preload,
+        nt.array("Fuel/state", new double[] { remaining, scored, missed, field.hasGamePieces() ? preload : 0,
             floor.onField(), floor.inHub(), floor.inChute(false), floor.inChute(true), capacity,
             floor.total() + remaining, picked });
         double[] flat = new double[shots.size() * 6];

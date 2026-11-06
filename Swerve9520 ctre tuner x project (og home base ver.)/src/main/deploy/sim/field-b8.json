@@ -1,0 +1,12 @@
+{
+  "game": "B8 practice field",
+  "generatedBy": "sim-ui/scripts/gen-field.mjs",
+  "units": "meters, WPILib blue origin (a corner of the room, +X along the 15 ft side)",
+  "note": "Team 9520 practice space: 15 ft x 11 ft, measured. No AprilTags or field elements yet.",
+  "lengthFt": 15,
+  "widthFt": 11,
+  "length": 4.572,
+  "width": 3.3528,
+  "gridM": 0.3048,
+  "elements": []
+}

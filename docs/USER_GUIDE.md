@@ -178,6 +178,7 @@ At the very top of the page is the **top bar**:
   - The **Run tab** is where you run them and study what happened.
   - Switching tabs does not lose your work: your last recorded run stays in the Run tab.
 - **Field: AndyMark / Welded.** Official FRC fields are built by two different suppliers, and their AprilTags are in very slightly different places (about 1.5 centimeters apart). Our robot program uses the **AndyMark** layout. If you pick Welded, a small orange warning appears to remind you that the robot program does not match.
+- **Field: B8 practice (15 × 11 ft).** Our own practice space, drawn as a plain rectangle with a 1-foot grid. It has no AprilTags and no HUBs yet, so the cameras see nothing and there is no FUEL: use it to practice driving. When you pick it, the robot program's simulation switches too (any running auto stops) and the robot is placed in the middle. To drive, start with `./sim.sh` (with the WPILib window), drag **Keyboard 0** onto **Joystick 0** in that window and set **Robot State** to **Teleoperated**; the Run tab shows the robot moving. Paths and autos drawn for the big field still show on B8, but they were made for the big field.
 - **The connection light** shows **● robot sim connected** (green) when the web page can talk to the robot program, or **○ robot sim not running** when it cannot.
 
 The big picture in the middle of both tabs is the **field**, drawn to scale and seen from above. The blue alliance wall is on the left and the red alliance wall is on the right. You will see:

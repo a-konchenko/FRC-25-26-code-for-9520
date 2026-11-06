@@ -2,6 +2,14 @@
 
 Short reference. Full details: [docs/simulator.md](docs/simulator.md). Student guide: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
+## 2026-11-05 — branch `coach`: B8 practice field (simulator)
+
+- **Robot code: no changes.** Everything is in `frc.robot.sim`, `sim-ui` and the deploy folder's `sim/` files.
+- **Field dropdown → B8 practice (15 × 11 ft):** Team 9520's practice space as a plain rectangle (4.572 × 3.3528 m, exact) with a 1 ft grid. No AprilTags and no field elements yet: driving practice only.
+- The robot sim follows the dropdown (`/Sim/Control/field`, `/Sim/Field/active`): `FieldModel("b8")` reads `deploy/sim/field-b8.json`, no FUEL is staged, the Limelight/PhotonVision sims see no tags, any run stops, and the robot is placed in the middle of B8.
+- `gen-field.mjs` now also writes `field-b8.json` (UI + deploy copies). Add elements there and tags in `FieldModel` when the space gets targets.
+- Tests: `FieldModelTest` (6 JUnit tests). Written without a JDK on the dev machine: run `./gradlew test` before relying on them.
+
 ## 2026-10-29 — branch `coach`: speed markers (Plan tab)
 
 - **Robot code: no changes.** UI only.

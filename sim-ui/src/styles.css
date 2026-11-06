@@ -159,6 +159,9 @@ main { flex: 1; min-height: 0; }
 .wall-blue { stroke: var(--blue); }
 .wall-red { stroke: var(--red); }
 .field-hint { font-size: 0.3px; fill: var(--muted); }
+/* practice field (B8): 1 ft grid + caption under the field */
+.grid-line { stroke: var(--muted); stroke-opacity: 0.35; stroke-width: 0.012; }
+.field-caption { font-size: 0.16px; fill: var(--muted); }
 
 .el polygon { stroke-width: 0.025; }
 .el-solid polygon { fill: var(--solid); stroke: var(--text); stroke-opacity: 0.3; }

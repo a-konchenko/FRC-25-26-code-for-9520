@@ -2,7 +2,9 @@ package frc.robot.sim;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.apriltag.AprilTagFields;
@@ -39,7 +41,9 @@ public class SimManager {
     private final SimControl  control;
     private final PathLogging pathLogging = new PathLogging(nt);
     private final PlanPreview planPreview = new PlanPreview(nt);
-    private final FieldModel  field = new FieldModel();
+    /** Fields the UI can pick (/Sim/Control/field): the 2026 game field and the B8 practice space. */
+    private final Map<String, FieldModel> fields = new LinkedHashMap<>();
+    private FieldModel field;
     private final LimelightSim ll3 = new LimelightSim("ll3", LimelightSim.Mode.MEGATAG2, "limelight-three",
         SimRobotConstants.kLL3Mount, 62.5, 48.9, 6.0, 30.0);   // LL3: 62.5° × 48.9° FOV
     private final LimelightSim ll4 = new LimelightSim("ll4", LimelightSim.Mode.TARGETING, "limelight-four",
@@ -64,6 +68,8 @@ public class SimManager {
     public SimManager(RobotContainer container) {
         this.container  = container;
         this.drivetrain = container.drivetrain;
+        for (String id : new String[] { FieldModel.REBUILT_2026, FieldModel.B8 }) fields.put(id, new FieldModel(id));
+        this.field      = fields.get(FieldModel.REBUILT_2026);
         this.world      = new WorldModel(drivetrain, drift);
         this.control    = new SimControl(this, container, nt);
         this.photon     = new PhotonSim(container.vision, field);
@@ -100,29 +106,34 @@ public class SimManager {
 
         publishTags("andymark", AprilTagFields.k2026RebuiltAndymark);
         publishTags("welded",   AprilTagFields.k2026RebuiltWelded);
+        publishLayout("b8", fields.get(FieldModel.B8).tags); // B8 has no tags yet: an empty array
         // VisionSubsystem loads the AndyMark layout
         nt.string("Field/robotCodeVariant", "andymark");
     }
 
-    /** Tags as flat double[]: {id, x, y, z, yawRad, pitchRad} per tag. */
-    private void publishTags(String name, AprilTagFields field) {
+    /** One of the WPILib tag layouts, by name. */
+    private void publishTags(String name, AprilTagFields layout) {
         try {
-            AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(field);
-            List<Double> flat = new ArrayList<>();
-            for (var tag : layout.getTags()) {
-                var p = tag.pose;
-                flat.add((double) tag.ID);
-                flat.add(p.getX());
-                flat.add(p.getY());
-                flat.add(p.getZ());
-                flat.add(p.getRotation().getZ());
-                flat.add(p.getRotation().getY());
-            }
-            nt.array("Field/tags/" + name, flat.stream().mapToDouble(Double::doubleValue).toArray());
-            nt.array("Field/size/" + name, new double[] { layout.getFieldLength(), layout.getFieldWidth() });
+            publishLayout(name, AprilTagFieldLayout.loadField(layout));
         } catch (Exception e) {
             System.out.println("[Sim] Could not load tag layout " + name + ": " + e.getMessage());
         }
+    }
+
+    /** Tags as flat double[]: {id, x, y, z, yawRad, pitchRad} per tag, plus the field size. */
+    private void publishLayout(String name, AprilTagFieldLayout layout) {
+        List<Double> flat = new ArrayList<>();
+        for (var tag : layout.getTags()) {
+            var p = tag.pose;
+            flat.add((double) tag.ID);
+            flat.add(p.getX());
+            flat.add(p.getY());
+            flat.add(p.getZ());
+            flat.add(p.getRotation().getZ());
+            flat.add(p.getRotation().getY());
+        }
+        nt.array("Field/tags/" + name, flat.stream().mapToDouble(Double::doubleValue).toArray());
+        nt.array("Field/size/" + name, new double[] { layout.getFieldLength(), layout.getFieldWidth() });
     }
 
     /** Put the robot somewhere: the robot code's estimate AND the truth. */
@@ -157,8 +168,7 @@ public class SimManager {
 
     public void update() {
         if (!placed) {
-            double[] s = SimRobotConstants.kDefaultStartPose;
-            placeRobot(new Pose2d(s[0], s[1], Rotation2d.fromRadians(s[2])));
+            placeRobot(field.defaultStartPose());
             placed = true;
         }
 
@@ -198,6 +208,29 @@ public class SimManager {
 
     /** Reload the robot's preload and restage every FUEL on the field. */
     public void resetFuel() { fuel.reset(seed); }
+
+    /**
+     * Switch fields (the UI's Field dropdown). Everything that depends on the
+     * field starts over: any run or test drive stops, FUEL is restaged (none
+     * on B8), the PhotonVision sim sees the new field's tags, and the robot
+     * is placed on that field's default start pose.
+     */
+    public void setField(String id) {
+        FieldModel next = fields.get(id);
+        if (next == null) {
+            System.out.println("[Sim] Unknown field '" + id + "' — staying on " + field.name);
+            return;
+        }
+        if (next == field) return;
+        cancelTestDrive();
+        control.stop();
+        field = next;
+        photon.setField(next);
+        fuel.setField(next);
+        fuel.reset(seed);
+        placeRobot(next.defaultStartPose());
+        System.out.printf("[Sim] Field: %s (%.3f × %.3f m)%n", next.name, next.length, next.width);
+    }
 
     private void publishVision(Pose2d truth) {
         for (LimelightSim ll : new LimelightSim[] { ll3, ll4 }) {
@@ -251,6 +284,9 @@ public class SimManager {
         ll4.readSettings(nt);
         photon.readSettings(nt);
         fuel.readSettings(nt);
+        // The UI's Field dropdown: "2026" (game field) or "b8" (practice space)
+        String wanted = nt.settingString("field", field.id);
+        if (!wanted.equals(field.id)) setField(wanted);
         if (nt.action("resetFuel") != null) resetFuel();
         // [red 0/1] — the human player opens that alliance's CHUTE
         double[] chute = nt.action("releaseChute");
@@ -392,6 +428,7 @@ public class SimManager {
         nt.string("Match/mode", mode);
         nt.number("Match/time", DriverStation.getMatchTime());
         nt.string("Match/alliance", DriverStation.getAlliance().map(Enum::name).orElse("Unknown"));
+        nt.string("Field/active", field.id);
         nt.number("Time", Timer.getFPGATimestamp());
         nt.number("Heartbeat", ++heartbeat);
     }

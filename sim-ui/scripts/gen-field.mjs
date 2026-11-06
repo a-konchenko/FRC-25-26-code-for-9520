@@ -1,4 +1,6 @@
-// Generates field-2026.json (2026 REBUILT) for the web UI and the Java sim.
+// Generates the field files for the web UI and the Java sim:
+//   field-2026.json  the 2026 REBUILT field (AndyMark and Welded variants)
+//   field-b8.json    Team 9520's practice space B8 (a plain 15 ft x 11 ft rectangle)
 //
 //   node scripts/gen-field.mjs
 //
@@ -163,13 +165,35 @@ for (const [name, v] of Object.entries(VARIANTS)) {
   };
 }
 
-const json = JSON.stringify(out, null, 2) + '\n';
-const targets = [
-  resolve(here, '../src/field/field-2026.json'),
-  resolve(here, '../../Swerve9520 ctre tuner x project (og home base ver.)/src/main/deploy/sim/field-2026.json'),
-];
-for (const t of targets) {
-  mkdirSync(dirname(t), { recursive: true });
-  writeFileSync(t, json);
-  console.log('wrote', t);
+// ── B8: Team 9520's practice field ───────────────────────────────────────────
+// A plain 15 ft x 11 ft rectangle (exact). Same coordinate convention as the
+// game field: origin in a corner, +X along the 15 ft side, +Y along the 11 ft
+// side, angles counter-clockwise. No AprilTags and no field elements yet:
+// driving practice only (so the sim stages no FUEL on it). When the space
+// gets targets, add elements here with the same schema as the 2026 field
+// (id, name, type, poly, cite) and tags in FieldModel.java.
+const B8 = {
+  game: 'B8 practice field',
+  generatedBy: 'sim-ui/scripts/gen-field.mjs',
+  units: 'meters, WPILib blue origin (a corner of the room, +X along the 15 ft side)',
+  note: 'Team 9520 practice space: 15 ft x 11 ft, measured. No AprilTags or field elements yet.',
+  lengthFt: 15,
+  widthFt: 11,
+  length: +(15 * 12 * IN).toFixed(4), // 4.572 m
+  width: +(11 * 12 * IN).toFixed(4),  // 3.3528 m
+  gridM: +(12 * IN).toFixed(4),       // the UI draws a 1 ft grid
+  elements: [],
+};
+
+// Each file goes to the UI (bundled) and to the robot project's deploy folder (read by FieldModel.java).
+const ROBOT_DEPLOY = '../../Swerve9520 ctre tuner x project (og home base ver.)/src/main/deploy/sim';
+function writeBoth(name, data) {
+  const json = JSON.stringify(data, null, 2) + '\n';
+  for (const t of [resolve(here, '../src/field', name), resolve(here, ROBOT_DEPLOY, name)]) {
+    mkdirSync(dirname(t), { recursive: true });
+    writeFileSync(t, json);
+    console.log('wrote', t);
+  }
 }
+writeBoth('field-2026.json', out);
+writeBoth('field-b8.json', B8);

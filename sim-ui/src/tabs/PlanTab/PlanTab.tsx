@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FieldView, type FieldPointer } from '../../field/FieldView';
 import { RobotShape, Trace } from '../../field/RobotShape';
-import { FIELD, type Variant } from '../../field/fieldData';
+import { FIELDS, type Variant } from '../../field/fieldData';
 import { nt, useConnected, useNT } from '../../nt/store';
 import {
   deleteAuto, deletePath, fileMtime, listFiles, nameTaken, readAuto, readPath, readSettings, validName,
@@ -41,7 +41,7 @@ export function PlanTab({ variant, onRun }: Props) {
   const connected = useConnected();
   const ntNamed = useNT<string[]>('/Sim/NamedCommands', []);
   const ntSize = useNT<number[]>('/Sim/Robot/size', []);
-  const fieldV = FIELD.variants[variant];
+  const fieldV = FIELDS[variant];
 
   const [files, setFiles] = useState<FileList | null>(null);
   const [fileError, setFileError] = useState('');
@@ -217,8 +217,12 @@ export function PlanTab({ variant, onRun }: Props) {
     if (!input) return;
     const fresh = await listFiles();
     if (!validName(input) || nameTaken(kind === 'path' ? fresh.paths : fresh.autos, input)) { setStatus(`"${input}" is not a valid new name`); return; }
-    const W = fieldV.width;
-    const data = kind === 'path' ? newPath({ x: 2.5, y: W / 2 + 1.5 }, { x: 6.5, y: W / 2 + 2.6 }, settings ?? undefined) : newAuto();
+    const L = fieldV.length, W = fieldV.width;
+    // A new path starts in the blue half of the game field; on a small practice field, across its middle
+    const [from, to] = L > 8
+      ? [{ x: 2.5, y: W / 2 + 1.5 }, { x: 6.5, y: W / 2 + 2.6 }]
+      : [{ x: L * 0.2, y: W / 2 }, { x: L * 0.8, y: W / 2 }];
+    const data = kind === 'path' ? newPath(from, to, settings ?? undefined) : newAuto();
     openedMtime.current = kind === 'path' ? await writePath(input, data as PPPath) : await writeAuto(input, data as PPAuto);
     await refresh();
     const d = kind === 'path' ? { kind, name: input, data: data as PPPath } as Doc : { kind, name: input, data: data as PPAuto } as Doc;

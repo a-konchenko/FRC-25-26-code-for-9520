@@ -4,10 +4,11 @@
 // angles counter-clockwise in radians — exactly like the robot code. The
 // y-flip to screen coordinates happens once, here.
 import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from 'react';
-import { FIELD, getTags, type FieldElement, type Variant } from './fieldData';
+import { FIELDS, getTags, type FieldElement, type Variant } from './fieldData';
 import { useNTFrame } from '../nt/store';
 
 const MARGIN = 0.45; // meters of space around the field
+const FT = 0.3048;
 
 interface FieldCtx { length: number; width: number; }
 const Ctx = createContext<FieldCtx>({ length: 16.5, width: 8.0 });
@@ -30,9 +31,16 @@ interface Props {
   cursor?: string;
 }
 
+/** Interior grid positions: step, 2·step, … strictly inside [0, len]. */
+function ticks(len: number, step: number): number[] {
+  const out: number[] = [];
+  for (let k = 1; k * step < len - 1e-6; k++) out.push(k * step);
+  return out;
+}
+
 export function FieldView({ variant, children, showTagIds = true, onPointerDown, onPointerMove, onPointerUp, cursor }: Props) {
   useNTFrame(); // tags arrive over NT
-  const v = FIELD.variants[variant];
+  const v = FIELDS[variant];
   const L = v.length, W = v.width;
   const flipRef = useRef<SVGGElement>(null);
   const tags = getTags(variant);
@@ -58,7 +66,10 @@ export function FieldView({ variant, children, showTagIds = true, onPointerDown,
   };
 
   const ctx = useMemo(() => ({ length: L, width: W }), [L, W]);
-  const start = FIELD.startingLineFromWallM;
+  // Official game field: alliance zones, starting lines, center line, alliance walls.
+  // Practice field (B8): a grid and a center cross instead.
+  const start = v.startingLineFromWallM;
+  const grid = v.gridM;
 
   return (
     <svg
@@ -81,16 +92,35 @@ export function FieldView({ variant, children, showTagIds = true, onPointerDown,
         <g ref={flipRef} transform={`matrix(1 0 0 -1 0 ${W})`}>
           {/* carpet + zones */}
           <rect x={0} y={0} width={L} height={W} className="carpet" />
-          <rect x={0} y={0} width={start} height={W} className="zone zone-blue" />
-          <rect x={L - start} y={0} width={start} height={W} className="zone zone-red" />
+          {start != null && (
+            <>
+              <rect x={0} y={0} width={start} height={W} className="zone zone-blue" />
+              <rect x={L - start} y={0} width={start} height={W} className="zone zone-red" />
 
-          {/* starting lines, center line, alliance walls */}
-          <line x1={start} y1={0} x2={start} y2={W} className="line line-blue" />
-          <line x1={L - start} y1={0} x2={L - start} y2={W} className="line line-red" />
-          <line x1={L / 2} y1={0} x2={L / 2} y2={W} className="line line-center" />
+              {/* starting lines, center line */}
+              <line x1={start} y1={0} x2={start} y2={W} className="line line-blue" />
+              <line x1={L - start} y1={0} x2={L - start} y2={W} className="line line-red" />
+              <line x1={L / 2} y1={0} x2={L / 2} y2={W} className="line line-center" />
+            </>
+          )}
+          {grid != null && (
+            <g className="grid">
+              <title>{`${Math.round(grid / FT)} ft grid`}</title>
+              {ticks(L, grid).map((x) => <line key={`x${x}`} x1={x} y1={0} x2={x} y2={W} className="grid-line" />)}
+              {ticks(W, grid).map((y) => <line key={`y${y}`} x1={0} y1={y} x2={L} y2={y} className="grid-line" />)}
+              <line x1={L / 2} y1={0} x2={L / 2} y2={W} className="line line-center" />
+              <line x1={0} y1={W / 2} x2={L} y2={W / 2} className="line line-center" />
+            </g>
+          )}
+
+          {/* guardrails, alliance walls */}
           <rect x={0} y={0} width={L} height={W} className="guardrail" />
-          <line x1={0} y1={0} x2={0} y2={W} className="wall wall-blue" />
-          <line x1={L} y1={0} x2={L} y2={W} className="wall wall-red" />
+          {start != null && (
+            <>
+              <line x1={0} y1={0} x2={0} y2={W} className="wall wall-blue" />
+              <line x1={L} y1={0} x2={L} y2={W} className="wall wall-red" />
+            </>
+          )}
 
           {v.elements.map((e) => <Element key={e.id} el={e} />)}
 
@@ -112,9 +142,14 @@ export function FieldView({ variant, children, showTagIds = true, onPointerDown,
         </g>
       </Ctx.Provider>
 
-      {tags.length === 0 && (
+      {tags.length === 0 && v.hasTags && (
         <text x={L / 2} y={W / 2} className="field-hint" textAnchor="middle">
           AprilTags appear when the robot sim is running
+        </text>
+      )}
+      {grid != null && (
+        <text x={L / 2} y={W + MARGIN * 0.62} className="field-caption" textAnchor="middle">
+          {`${v.game} — ${(L / FT).toFixed(0)} × ${(W / FT).toFixed(0)} ft (${L.toFixed(3)} × ${W.toFixed(3)} m), ${Math.round(grid / FT)} ft grid. No targets yet.`}
         </text>
       )}
     </svg>
