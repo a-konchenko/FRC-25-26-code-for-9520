@@ -1,5 +1,7 @@
 # Team 9520 Autonomy Simulator
 
+> Moving the simulator to new robot code: see [sim-code-change-plan.md](sim-code-change-plan.md).
+
 Run the **real robot code** on a laptop, on a to-scale 2026 REBUILT field, and see
 where the robot *thinks* it is versus where it *really* is.
 
@@ -227,7 +229,17 @@ for Plan-tab collision warnings. Tested in `CameraGeometryTest`.
   - Gearing, inertia and travel are placeholders.
 - **Fuel** follows the agreed simple model, scored if aimed:
   - The robot starts with `preload` (≤ 8). While the feeder spins, one ball leaves every 0.25 s.
-  - A ball **scores** if the true robot points within ±3° of its alliance hub, is 1.5–5.5 m away, and the flywheel is at ≥ 90% of its setpoint.
+  - A ball **scores** if it would pass through its alliance HUB's opening, the true robot is 1.5–5.5 m away, and the flywheel is at ≥ 90% of its setpoint.
+  - **The opening** is the real one from the 2026 Field Dimension Drawings: a hexagon
+    **41.73 in across the flats (inside)**, rim at 72 in, centered on the HUB, flat sides
+    facing the side walls (±Y) and corners toward the alliance walls (FE-2026 sheet 4,
+    GE-26300 sheet 4). The ball goes straight along the shooter direction and is taken
+    to cross the rim at the hub-center distance (range assumed right); its center must
+    be inside the hexagon by a ball radius (5.91 in FUEL → 0.455 m of room from the
+    center to a flat). `FieldModel.inHubOpening`, tested in `HubOpeningTest`.
+    This replaced the earlier ±3° aim cone (2026-10-29): straight in from 3 m, a shot
+    may now be ~8.7° off; from 5.5 m ~4.7°; from 1.5 m ~17°. The robot code's own
+    "aimed" tolerance (`AimController`, 1.5°) is unchanged.
   - Otherwise it misses, with a reason: aim, too close, too far, or flywheel slow.
   - The shooter is assumed to face the robot's front (`SimRobotConstants.kShooterYawDeg`).
   - There's no ball flight.
@@ -422,7 +434,12 @@ All coordinates use the WPILib blue origin, in meters: +X from the blue wall tow
   `field-2026.json` from the tag anchors plus dimensions in the
   [2026 Game Manual](https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf),
   section 5:
-  - Hub 47 × 47 in, centered from its 8 tags
+  - Hub 47 × 47 in, centered from its 8 tags. **Checked against the
+    [2026 Field Dimension Drawings](https://firstfrc.blob.core.windows.net/frc2026/FieldAssets/2026-field-dimension-dwgs.pdf)**
+    (FE-2026 rev B, GE-26300): base 47.00 in; center 182.11 in (welded) / 181.56 in
+    (AndyMark) from the alliance wall at half the field width — the tag-derived
+    centers agree within 1 mm; 72 in rim; scoring opening a hexagon 41.73 in across
+    the flats inside (drawn in yellow on the field, `hubOpening` in the JSON)
   - Bumps 73.0 × 44.4 in
   - Trenches 65.65 × 47.0 in, with a 22.25 in opening
   - Tower base 39.0 × 45.18 in, centered from tags 31/32
@@ -523,7 +540,7 @@ Everything is under `/Sim`. Poses are `double[] {x, y, θ rad}`.
 | `reset` | double[] `[seq, kind, red, errX, errY, errθ]` | Stop and place on the start pose |
 | `/Sim/Plan/previewRequest` | string | `{"id": n, "path": {….path JSON…}}` |
 | `cam/<ll3\|ll4\|pv>/<setting>` | double | enabled (0/1), noise, latencyMs, dropPct, hFovDeg, maxRangeM, mountErrX, mountErrY, mountErrYawDeg |
-| `fuel/<setting>` | double | preload, aimTolDeg, minDistM, maxDistM, capacity, intakeRate |
+| `fuel/<setting>` | double | preload, minDistM, maxDistM, capacity, intakeRate |
 | `resetFuel` | double[] `[seq]` | Preload the robot and restage all 504 FUEL |
 | `releaseChute` | double[] `[seq, red]` | That alliance's human player opens the CHUTE |
 | `intake` | double[] `[seq, on]` | Robot code intake on/off (`RobotContainer.setIntake`, like the X button) |

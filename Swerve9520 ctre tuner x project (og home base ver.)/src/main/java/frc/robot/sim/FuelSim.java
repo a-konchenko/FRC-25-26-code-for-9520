@@ -15,12 +15,15 @@ import frc.robot.subsystems.Shooter;
  * The robot starts with `preload` FUEL (game manual: up to 8). While the
  * feeder spins (|feeder| > 15 rps) one ball leaves every 0.25 s. A ball
  * SCORES in the alliance HUB when, at that moment, the TRUE robot:
- *   - points its shooter within ±aimTolDeg of the hub center,
+ *   - aims so the ball fits through the HUB opening: the ball travels along the
+ *     shooter direction and crosses the rim at the hub-center distance (range
+ *     assumed right); that point must be inside the hexagonal opening (field
+ *     drawings: 41.73 in across the flats, flats facing ±Y) by a ball radius,
  *   - is between minDist and maxDist from the hub center, and
  *   - has the flywheel at ≥ 90 % of its setpoint.
  * Otherwise it misses, with a reason (aim / too close / too far / slow wheel).
  * The shooter is assumed to face the robot's front (TO MEASURE — kShooterYawDeg).
- * No ball flight physics.
+ * No ball flight physics (no arc, no short/long).
  *
  * Phase 5a: the other FUEL lies on the field (FieldFuel, 504 in total). A
  * scored ball goes into the HUB and comes back out into the NEUTRAL ZONE; a
@@ -33,7 +36,6 @@ public class FuelSim {
     private static final double kIntakeOnRps = 5.0;
 
     public int    preload  = SimRobotConstants.kFuelPreload;
-    public double aimTolDeg = 3.0;
     public double minDistM = 1.5, maxDistM = 5.5;
     public int    capacity = SimRobotConstants.kHopperCapacity;
     public double intakeRate = SimRobotConstants.kIntakeRatePerS;
@@ -57,7 +59,6 @@ public class FuelSim {
 
     public void readSettings(SimNT nt) {
         preload    = (int) Math.round(nt.setting("fuel/preload", preload));
-        aimTolDeg  = nt.setting("fuel/aimTolDeg", aimTolDeg);
         minDistM   = nt.setting("fuel/minDistM", minDistM);
         maxDistM   = nt.setting("fuel/maxDistM", maxDistM);
         capacity   = (int) Math.round(nt.setting("fuel/capacity", capacity));
@@ -115,16 +116,17 @@ public class FuelSim {
         boolean red = DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red;
         Translation2d hub = field.hubCenter(red);
         double heading = robot.getRotation().getRadians() + Math.toRadians(SimRobotConstants.kShooterYawDeg);
-        double toHub = Math.atan2(hub.getY() - robot.getY(), hub.getX() - robot.getX());
-        double aimErr = Math.toDegrees(Math.IEEEremainder(heading - toHub, 2 * Math.PI));
         double dist = robot.getTranslation().getDistance(hub);
+        // Where the ball crosses the rim: along the shooter direction, at the hub's distance
+        double rimX = robot.getX() + Math.cos(heading) * dist, rimY = robot.getY() + Math.sin(heading) * dist;
+        boolean throughOpening = field.inHubOpening(red, rimX, rimY, SimRobotConstants.kFuelRadiusM);
         double setpoint = Math.abs(shooter.getShooterSetpointRPS());
         // The setpoint is in motor (rotor) rotations/s — the Shooter sets no gear ratio
         boolean fastEnough = setpoint > 1 && Math.abs(mech.shooter.rotorRps()) >= 0.9 * setpoint;
 
         int result;
         if (!fastEnough)                       result = MISS_SLOW;
-        else if (Math.abs(aimErr) > aimTolDeg) result = MISS_AIM;
+        else if (!throughOpening)              result = MISS_AIM;
         else if (dist < minDistM)              result = MISS_CLOSE;
         else if (dist > maxDistM)              result = MISS_FAR;
         else                                   result = HIT;
@@ -132,10 +134,10 @@ public class FuelSim {
         if (result == HIT) scored++; else missed++;
         mech.onShot();
 
-        // Where it lands, for drawing: hits end at the hub, misses along the shooter direction
+        // Where it lands, for drawing: hits where they cross the rim, misses along the shooter direction
         double range = result == HIT ? dist : result == MISS_SLOW ? Math.min(dist, 1.5) : Math.min(dist, maxDistM);
-        double tx = result == HIT ? hub.getX() : robot.getX() + Math.cos(heading) * range;
-        double ty = result == HIT ? hub.getY() : robot.getY() + Math.sin(heading) * range;
+        double tx = robot.getX() + Math.cos(heading) * range;
+        double ty = robot.getY() + Math.sin(heading) * range;
         shots.addLast(new double[] { ++seq, robot.getX(), robot.getY(), tx, ty, result });
         while (shots.size() > 24) shots.removeFirst();
 

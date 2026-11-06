@@ -93,6 +93,7 @@ export function FieldView({ variant, children, showTagIds = true, onPointerDown,
           <line x1={L} y1={0} x2={L} y2={W} className="wall wall-red" />
 
           {v.elements.map((e) => <Element key={e.id} el={e} />)}
+          {(['blue', 'red'] as const).map((a) => <HubOpening key={a} at={v.hubCenters[a]} alliance={a} />)}
 
           {/* AprilTags: short bar on the mounting face + tick showing which way it faces */}
           {tags.map((t) => {
@@ -118,6 +119,22 @@ export function FieldView({ variant, children, showTagIds = true, onPointerDown,
         </text>
       )}
     </svg>
+  );
+}
+
+/** The HUB's hexagonal scoring opening (corners toward the alliance walls, flats toward the side walls). */
+function HubOpening({ at, alliance }: { at: [number, number]; alliance: 'blue' | 'red' }) {
+  const { acrossFlatsM, heightM } = FIELD.hubOpening;
+  const R = acrossFlatsM / Math.sqrt(3); // corner radius
+  const pts = [0, 60, 120, 180, 240, 300].map((d) => {
+    const a = (d * Math.PI) / 180;
+    return `${at[0] + R * Math.cos(a)},${at[1] + R * Math.sin(a)}`;
+  }).join(' ');
+  return (
+    <g className={`hub-opening el-${alliance}`}>
+      <title>{`HUB opening (${alliance}): hexagon ${(acrossFlatsM / 0.0254).toFixed(2)} in across the flats, rim ${(heightM / 0.0254).toFixed(0)} in high — the field drawings (FE-2026, GE-26300)`}</title>
+      <polygon points={pts} />
+    </g>
   );
 }
 

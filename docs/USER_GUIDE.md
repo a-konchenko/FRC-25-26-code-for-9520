@@ -443,14 +443,13 @@ On each card:
 
 **Fuel** shows how many balls are **in robot**, **scored** and **missed**, and the reason for the last shot (for example "missed — aim off"). In this simulator a ball scores when all three of these are true at the moment it leaves:
 
-1. The robot is really pointing within the **aim tolerance** of its own HUB.
+1. Shot straight out of the front of the robot, the ball would go through the top opening of its own HUB without touching the rim. The opening is a hexagon 41.73 inches across (the size on the official field drawings), drawn in yellow on each HUB. A ball is 5.91 inches, so there are about 18 inches (0.46 m) of room on each side of the center.
 2. It is between 1.5 meters and the **max distance** from the HUB.
 3. The flywheel is spinning at least 90 percent of its target speed.
 
-There is no ball flight; it is a simple rule. The panel has these controls:
+There is no ball flight; it is a simple rule. It assumes the shot is always the right distance, so only aiming left and right can miss the opening. Close to the HUB you can be quite far off and still score; from far away you must aim much more precisely. The panel has these controls:
 
 - **Preload**: how many balls the robot starts with. The rules allow up to 8.
-- **Aim tolerance**: how precisely the robot must aim.
 - **Max distance**: the farthest the robot can be from the HUB and still score.
 - **Reload fuel**: refills the robot. Fuel is also refilled automatically every time you press Play or Reset.
 

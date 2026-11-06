@@ -171,6 +171,7 @@ main { flex: 1; min-height: 0; }
 .el-marking.el-red polygon { stroke: var(--red); }
 .el-label { font-size: 0.17px; font-weight: 700; fill: var(--text); opacity: 0.55; pointer-events: none; }
 .el-label-small { font-size: 0.13px; }
+.hub-opening polygon { fill: none; stroke: #facc15; stroke-width: 0.02; pointer-events: none; }
 .el-solid .el-label { fill: white; opacity: 0.9; }
 
 .tag-face { stroke: var(--tag); stroke-width: 0.05; stroke-linecap: square; }

@@ -2,6 +2,17 @@
 
 Short reference. Full details: [docs/simulator.md](docs/simulator.md). Student guide: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
+## 2026-10-29 — branch `coach`: plan for moving the sim to new code
+
+- New `docs/sim-code-change-plan.md`: what carries over, the ~25 hooks the sim needs from the robot code, effort estimates, and a step-by-step port plan (step 1, an adapter in the current code, recommended first). No code changes.
+
+## 2026-10-29 — branch `coach`: HUB checked against the field drawings
+
+- **Robot code: no changes** (sim only: `FieldModel`, `FuelSim`, `gen-field.mjs`, UI).
+- Checked the HUB against the [2026 Field Dimension Drawings](https://firstfrc.blob.core.windows.net/frc2026/FieldAssets/2026-field-dimension-dwgs.pdf): 47 in base, 72 in rim and the center (182.11 in welded / 181.56 in AndyMark from the wall) already matched, within 1 mm.
+- **Scoring area is now the real opening**: a hexagon 41.73 in across the flats (inside), flats facing the side walls. A shot scores if the ball (5.91 in) passes through it without touching the rim, instead of the old ±3° aim cone. That is more forgiving close in (~17° at 1.5 m, ~8.7° at 3 m, ~4.7° at 5.5 m). The "Aim tolerance" slider is gone; the opening is drawn in yellow on each HUB.
+- Tests: new `HubOpeningTest` (5), 47 JUnit tests in all; `vision-test.ts` (ShootAllAuto 8/8) and `field-fuel-test.ts` pass.
+
 ## 2026-10-29 — branch `coach`: speed markers (Plan tab)
 
 - **Robot code: no changes.** UI only.

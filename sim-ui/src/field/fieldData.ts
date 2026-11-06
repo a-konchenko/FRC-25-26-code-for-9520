@@ -38,6 +38,8 @@ export const FIELD = fieldJson as unknown as {
   startingLineFromWallM: number;
   autoDurationS: number;
   fuelPreloadMax: number;
+  /** HUB scoring opening: hexagon, flat sides facing ±Y (field drawings: 41.73 in across the flats, rim at 72 in). */
+  hubOpening: { acrossFlatsM: number; heightM: number; flatsFacing: 'Y' };
   robotRules: { maxPerimeterM: number; maxHeightM: number; maxBumperExtensionM: number; minBumperFoamM: number };
   variants: Record<Variant, FieldVariant>;
 };

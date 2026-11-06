@@ -42,13 +42,10 @@ export function MechPanel({ fuel, setFuel }: Props) {
             </div>
           </>
         )}
-        <p className="muted tiny">A ball scores if the robot really points within ±{fuel.aimTolDeg}° of its hub, is {fuel.minDistM}–{fuel.maxDistM} m away and the flywheel is ≥ 90 % of its setpoint. Simple model — no ball flight.</p>
+        <p className="muted tiny">A ball scores if, shot straight out of the robot's front, it would pass through its HUB's hexagonal opening (41.73 in across, the size on the field drawings) without touching the rim, the robot is {fuel.minDistM}–{fuel.maxDistM} m away and the flywheel is ≥ 90 % of its setpoint. Simple model: the range is assumed right (no ball flight).</p>
         <label className="slider"><span className="slider-label">Preload</span>
           <input type="range" min={0} max={8} step={1} value={fuel.preload} onChange={(e) => setFuel({ ...fuel, preload: Number(e.target.value) })} />
           <span className="slider-value">{fuel.preload}</span></label>
-        <label className="slider"><span className="slider-label">Aim tolerance</span>
-          <input type="range" min={0.5} max={10} step={0.5} value={fuel.aimTolDeg} onChange={(e) => setFuel({ ...fuel, aimTolDeg: Number(e.target.value) })} />
-          <span className="slider-value">±{fuel.aimTolDeg}°</span></label>
         <label className="slider"><span className="slider-label">Max distance</span>
           <input type="range" min={2} max={8} step={0.25} value={fuel.maxDistM} onChange={(e) => setFuel({ ...fuel, maxDistM: Number(e.target.value) })} />
           <span className="slider-value">{fuel.maxDistM} m</span></label>

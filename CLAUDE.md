@@ -70,7 +70,7 @@ Standard command-based structure: `Robot` (TimedRobot) → `RobotContainer` (sub
 - `SimRobotConstants` holds physical placeholders (frame size, mass, MOI, camera mounts) still marked TO MEASURE.
 - **Locking:** CTRE calls `WorldModel.onSample` while holding its own state lock. Never call `drivetrain.getState()` / `getStateCopy()` while holding `world.lock()`. Read the state first, then lock.
 - Cameras: `LimelightSim` writes the real Limelight NT entries (LL3 MegaTag2 uses the heading the robot code sends). `PhotonSim` wraps PhotonLib's simulator. Both observe `WorldModel.truthAt(now − latency)`, and both must skip frames briefly after a teleport (`SimManager.teleported`).
-- `MechanismSims` drives the non-drive TalonFX sim states (it creates extra `TalonFX` objects for the same CAN IDs). `FuelSim` implements the "scored if aimed" rule.
+- `MechanismSims` drives the non-drive TalonFX sim states (it creates extra `TalonFX` objects for the same CAN IDs). `FuelSim` implements the "scored if aimed" rule: the shot must pass through the HUB's hexagonal opening (41.73 in across the flats, from the field drawings; `FieldModel.inHubOpening`).
 
 ### Web UI (`sim-ui/src`)
 

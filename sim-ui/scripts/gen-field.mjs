@@ -7,6 +7,11 @@
 //            2026-rebuilt-welded.json (the same layout the robot code loads)
 //   [GM]     2026 FRC Game Manual, section 5 ARENA (TU22)
 //            https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf
+//   [DWG]    2026 Field Dimension Drawings (FE-2026 rev B, GE-26300 HUB)
+//            https://firstfrc.blob.core.windows.net/frc2026/FieldAssets/2026-field-dimension-dwgs.pdf
+//            HUB checked against them: 47.00in base, center 182.11in (welded) /
+//            181.56in (AndyMark) from the alliance wall at half the field
+//            width — the tag-derived centers agree within 1 mm.
 //
 // Coordinates: WPILib blue origin, meters. +X from the blue alliance wall
 // toward red, +Y to the left as seen from blue. The field is rotationally
@@ -135,7 +140,10 @@ const out = {
   startingLineFromWallM: +(158.6 * IN).toFixed(4),
   autoDurationS: 20,       // [GM] 7.4.1 "first 20 seconds of the MATCH"
   fuelPreloadMax: 8,       // [GM] "8 FUEL may be preloaded in each ROBOT"
-  hubOpeningHeightM: +(72 * IN).toFixed(4),
+  // HUB scoring opening — [DWG] FE-2026 sheet 4: hexagon "(41.73) INSIDE" with
+  // its rim at "(72.00)"; GE-26300 sheet 4: centered on the base, flat sides
+  // facing the side walls (±Y), corners toward the alliance walls (±X).
+  hubOpening: { acrossFlatsM: +(41.73 * IN).toFixed(4), heightM: +(72 * IN).toFixed(4), flatsFacing: 'Y' },
   robotRules: {            // [GM] section 8
     maxPerimeterM: +(110.0 * IN).toFixed(4),  // R104
     maxHeightM: +(30.0 * IN).toFixed(4),      // R104 / R107
