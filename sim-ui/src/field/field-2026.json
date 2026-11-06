@@ -6,7 +6,11 @@
   "startingLineFromWallM": 4.0284,
   "autoDurationS": 20,
   "fuelPreloadMax": 8,
-  "hubOpeningHeightM": 1.8288,
+  "hubOpening": {
+    "acrossFlatsM": 1.0599,
+    "heightM": 1.8288,
+    "flatsFacing": "Y"
+  },
   "robotRules": {
     "maxPerimeterM": 2.794,
     "maxHeightM": 0.762,

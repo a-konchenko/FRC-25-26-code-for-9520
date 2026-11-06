@@ -55,9 +55,14 @@ public class FieldModel {
     public final List<double[]> fuelSolids = new ArrayList<>();
     private Translation2d hubBlue = new Translation2d(4.6115, 4.0215);
     private Translation2d hubRed  = new Translation2d(11.9065, 4.0215);
+<<<<<<< HEAD
     /** False on a practice field without HUBs: no FUEL is staged and nothing can score. */
     private final boolean gamePieces;
     private final Pose2d defaultStart;
+=======
+    /** HUB opening: a hexagon, flat sides facing ±Y. Across the flats, inside (field drawings: 41.73 in). */
+    public double hubOpeningAcrossFlatsM = 1.0599;
+>>>>>>> d24650760f8c73eeca085a4f4a09409e26e531af
 
     /** The 2026 game field. */
     public FieldModel() {
@@ -102,6 +107,7 @@ public class FieldModel {
     /** Parses a deploy file; null (with a console note) if it can't be read. */
     private static JsonNode read(String deployRelative) {
         try {
+<<<<<<< HEAD
             return new ObjectMapper().readTree(new File(Filesystem.getDeployDirectory(), deployRelative));
         } catch (Exception e) {
             System.out.println("[Sim] " + deployRelative + " not loaded (" + e.getMessage() + ") — built-in size, no field elements");
@@ -121,6 +127,15 @@ public class FieldModel {
     private void loadElements(JsonNode elements) {
         try {
             for (JsonNode el : elements) {
+=======
+            JsonNode root = new ObjectMapper().readTree(new File(Filesystem.getDeployDirectory(), "sim/field-2026.json"));
+            JsonNode v = root.path("variants").path("andymark");
+            JsonNode hc = v.path("hubCenters");
+            hubBlue = new Translation2d(hc.path("blue").get(0).asDouble(), hc.path("blue").get(1).asDouble());
+            hubRed  = new Translation2d(hc.path("red").get(0).asDouble(),  hc.path("red").get(1).asDouble());
+            hubOpeningAcrossFlatsM = root.path("hubOpening").path("acrossFlatsM").asDouble(hubOpeningAcrossFlatsM);
+            for (JsonNode el : v.path("elements")) {
+>>>>>>> d24650760f8c73eeca085a4f4a09409e26e531af
                 JsonNode poly = el.path("poly");
                 double[] flat = new double[poly.size() * 2];
                 double[] box = { Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE };
@@ -151,6 +166,26 @@ public class FieldModel {
     public Pose2d defaultStartPose() { return defaultStart; }
 
     public Translation2d hubCenter(boolean red) { return red ? hubRed : hubBlue; }
+
+    /**
+     * True if a ball of radius {@code ballRadiusM} whose center crosses the HUB
+     * rim at (x, y) fits through the opening (it doesn't touch the rim).
+     */
+    public boolean inHubOpening(boolean red, double x, double y, double ballRadiusM) {
+        Translation2d c = hubCenter(red);
+        return insideHexagon(x - c.getX(), y - c.getY(), hubOpeningAcrossFlatsM / 2 - ballRadiusM);
+    }
+
+    /**
+     * Point (dx, dy) inside a regular hexagon centered on the origin with flat
+     * sides facing ±Y (corners on ±X) and the given inradius (center to a flat).
+     * The other two pairs of flats face ±30° from the X axis.
+     */
+    static boolean insideHexagon(double dx, double dy, double inradius) {
+        if (inradius <= 0) return false;
+        double ax = Math.abs(dx), ay = Math.abs(dy);
+        return ay <= inradius && ax * Math.sqrt(3) / 2 + ay / 2 <= inradius;
+    }
 
     /** Bounding box {minX, minY, maxX, maxY} of an element (e.g. "red-depot"), or null if unknown. */
     public double[] box(String id) { return boxes.get(id); }

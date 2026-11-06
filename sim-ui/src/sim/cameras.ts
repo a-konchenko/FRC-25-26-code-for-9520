@@ -30,10 +30,10 @@ export const CAM_DEFAULTS: Record<CamKey, CamSettings> = {
 };
 
 export interface FuelSettings {
-  preload: number; aimTolDeg: number; minDistM: number; maxDistM: number;
+  preload: number; minDistM: number; maxDistM: number;
   capacity: number;    // FUEL the robot can hold (TO MEASURE)
   intakeRate: number;  // balls per second the intake can swallow (TO MEASURE)
 }
-export const FUEL_DEFAULTS: FuelSettings = { preload: 8, aimTolDeg: 3, minDistM: 1.5, maxDistM: 5.5, capacity: 40, intakeRate: 10 };
+export const FUEL_DEFAULTS: FuelSettings = { preload: 8, minDistM: 1.5, maxDistM: 5.5, capacity: 40, intakeRate: 10 };
 
 export const SHOT_REASON = ['scored', 'missed — aim off', 'missed — too close', 'missed — too far', 'missed — flywheel too slow'];

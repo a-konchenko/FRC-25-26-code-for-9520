@@ -71,7 +71,7 @@ Standard command-based structure: `Robot` (TimedRobot) → `RobotContainer` (sub
 - `FieldModel` is built per field id: `"2026"` (game field, tags + elements) or `"b8"` (Team 9520's 15 × 11 ft practice space, no targets yet). `SimManager.setField` hot-switches on the UI's `/Sim/Control/field` setting: it stops any run, restages FUEL (none on B8), re-adds the PhotonVision tags and places the robot on the field's default start pose. Keep anything field-dependent going through the current `field`.
 - **Locking:** CTRE calls `WorldModel.onSample` while holding its own state lock. Never call `drivetrain.getState()` / `getStateCopy()` while holding `world.lock()`. Read the state first, then lock.
 - Cameras: `LimelightSim` writes the real Limelight NT entries (LL3 MegaTag2 uses the heading the robot code sends). `PhotonSim` wraps PhotonLib's simulator. Both observe `WorldModel.truthAt(now − latency)`, and both must skip frames briefly after a teleport (`SimManager.teleported`).
-- `MechanismSims` drives the non-drive TalonFX sim states (it creates extra `TalonFX` objects for the same CAN IDs). `FuelSim` implements the "scored if aimed" rule.
+- `MechanismSims` drives the non-drive TalonFX sim states (it creates extra `TalonFX` objects for the same CAN IDs). `FuelSim` implements the "scored if aimed" rule: the shot must pass through the HUB's hexagonal opening (41.73 in across the flats, from the field drawings; `FieldModel.inHubOpening`).
 
 ### Web UI (`sim-ui/src`)
 
